@@ -38,6 +38,4 @@ python -m http.server 8765
 - Xenova/gpt2, Xenova/t5-small
 - Google Fonts: Noto Sans KR, JetBrains Mono
 
-## 2026-11-16 문구 검토
-
-humanize-kr의 정밀 절차로 본문을 진단·윤문·원문 대조했습니다. techdoc 문체(~함/~임)를 유지하고 어려운 표현과 긴 문장을 다듬었습니다. 111개 블록, 수치 표기, 계산 코드와 디자인 코드를 보존했습니다. 이 검토에서 논문 원본의 모든 주장·수치를 다시 검증한 것은 아닙니다.
+made by yangphago
