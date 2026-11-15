@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 글 탐지 실험실</title>
+<meta name="description" content="DetectGPT · Fast-DetectGPT · KatFishNet 세 논문의 원리를 실제 GPT-2로 체험하는 인터랙티브 페이지">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #090b17; --bg2: #10142a; --glass: rgba(255,255,255,.045); --glass2: rgba(255,255,255,.08);
+    --line: rgba(255,255,255,.11); --ink: #eef0ff; --sub: #a3a9c9; --dim: #6e7499;
+    --ai: #ff7a45; --human: #4cc9f0; --accent: #a06bff; --ok: #3ddc97; --bad: #ff5d73; --gold: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.75; overflow-x: hidden;
+    font-family: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(700px 500px at 10% 5%, rgba(160,107,255,.22), transparent 60%),
+                radial-gradient(600px 500px at 95% 25%, rgba(255,122,69,.15), transparent 60%),
+                radial-gradient(700px 600px at 50% 100%, rgba(76,201,240,.12), transparent 60%); }
+  #progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 20;
+    background: linear-gradient(90deg, var(--human), var(--accent), var(--ai)); }
+
+  /* ── 히어로 ── */
+  header.hero { position: relative; min-height: 88vh; display: grid; place-items: center; text-align: center; padding: 80px 16px 60px; overflow: hidden; }
+  .floaters { position: absolute; inset: 0; pointer-events: none; }
+  .floaters span { position: absolute; font-family: "JetBrains Mono", monospace; font-size: 13px; padding: 3px 9px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--glass); color: var(--sub); animation: drift linear infinite; opacity: 0; white-space: pre; }
+  @keyframes drift { 0% { transform: translateY(40px); opacity: 0; } 15% { opacity: .55; } 85% { opacity: .55; } 100% { transform: translateY(-140px); opacity: 0; } }
+  .hero-body { position: relative; z-index: 1; }
+  .hero h1 { font-size: clamp(34px, 7vw, 68px); line-height: 1.15; margin: 14px 0 18px; font-weight: 900; letter-spacing: -0.03em;
+    background: linear-gradient(100deg, #fff 10%, var(--human) 40%, var(--accent) 65%, var(--ai) 90%);
+    background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 8s linear infinite; }
+  @keyframes shine { to { background-position: 200% center; } }
+  .hero p { color: var(--sub); max-width: 640px; margin: 0 auto; font-size: 17px; }
+  .chips { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--glass); text-decoration: none; color: var(--ink); font-size: 14px; transition: .25s; }
+  .chip:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(160,107,255,.25); }
+  .chip b { font-family: "JetBrains Mono", monospace; color: var(--accent); }
+  .scroll-hint { margin-top: 40px; color: var(--dim); font-size: 13px; animation: bob 2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(6px); } }
+
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(9,11,23,.78); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line);
+    display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; padding: 8px; }
+  nav a { color: var(--sub); text-decoration: none; font-size: 13.5px; padding: 5px 11px; border-radius: 999px; transition: .2s; }
+  nav a:hover, nav a.on { color: #fff; background: var(--glass2); }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 0 16px 100px; }
+  section { margin-top: 90px; scroll-margin-top: 64px; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-size: 12.5px; letter-spacing: .08em; color: var(--accent); text-transform: uppercase; }
+  h2 { font-size: clamp(25px, 4vw, 34px); margin: 6px 0 6px; letter-spacing: -0.02em; font-weight: 900; }
+  h3 { font-size: 18px; margin: 26px 0 10px; }
+  .meta { color: var(--dim); font-size: 13.5px; margin-bottom: 4px; }
+  .card { background: var(--glass); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 16px; position: relative; }
+  .card.glow { box-shadow: 0 0 0 1px rgba(160,107,255,.25), 0 20px 60px -20px rgba(160,107,255,.35); }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .muted { color: var(--sub); font-size: 14.5px; }
+  .tiny { color: var(--dim); font-size: 12.5px; }
+  .analogy { border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(255,209,102,.09), transparent); padding: 14px 18px; border-radius: 0 14px 14px 0; }
+  .analogy .lbl { font-size: 12.5px; font-weight: 700; color: var(--gold); letter-spacing: .05em; }
+  .note { border: 1px dashed rgba(255,209,102,.4); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; color: #e7d9a8; margin-top: 12px; background: rgba(255,209,102,.05); }
+  .warn { border-color: rgba(255,93,115,.45); color: #ffc2cb; background: rgba(255,93,115,.06); }
+  .formula { font-family: "Cambria Math", "Times New Roman", serif; font-size: 19px; background: rgba(0,0,0,.3); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 18px; overflow-x: auto; white-space: nowrap; margin: 12px 0; text-align: center; color: #fff; }
+  .formula .hl-ai { color: var(--ai); } .formula .hl-h { color: var(--human); }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+  .step { background: var(--glass2); border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); }
+  .step b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; margin-right: 6px; }
+
+  button { font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass2); color: var(--ink); cursor: pointer; transition: .2s; }
+  button:hover:not(:disabled) { border-color: var(--accent); background: rgba(160,107,255,.15); }
+  button.primary { background: linear-gradient(135deg, #8b5cf6, #6d28d9); border-color: transparent; font-weight: 700; box-shadow: 0 6px 20px rgba(139,92,246,.35); }
+  button.primary:hover:not(:disabled) { filter: brightness(1.15); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  textarea, input[type=text] { width: 100%; font: inherit; font-size: 15px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.3); color: var(--ink); resize: vertical; }
+  textarea { min-height: 130px; }
+  select { font: inherit; font-size: 14px; padding: 7px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); color: var(--ink); }
+  input[type=range] { accent-color: var(--accent); width: 100%; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .slider { display: grid; grid-template-columns: 110px 1fr 56px; gap: 10px; align-items: center; font-size: 14px; margin-top: 8px; }
+  .slider output { font-family: "JetBrains Mono", monospace; text-align: right; color: var(--gold); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--sub); font-weight: 500; font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; font-family: "JetBrains Mono", monospace; }
+  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat div { background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  .stat b { display: block; font-size: 24px; font-family: "JetBrains Mono", monospace; }
+  .stat span { font-size: 12.5px; color: var(--sub); }
+  .badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .badge.fake { background: rgba(255,209,102,.15); color: var(--gold); }
+  .badge.real { background: rgba(61,220,151,.15); color: var(--ok); }
+  progress { width: 100%; height: 8px; accent-color: var(--accent); }
+  svg { max-width: 100%; height: auto; display: block; }
+  code { font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+
+  /* ── 용어 툴팁 ── */
+  .term { border-bottom: 1.5px dotted var(--accent); cursor: help; color: #e6dcff; }
+  .term:hover, .term:focus { background: rgba(160,107,255,.18); outline: none; border-radius: 3px; }
+  #tip { position: fixed; z-index: 50; max-width: 320px; padding: 12px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.6;
+    background: rgba(22,18,44,.97); border: 1px solid rgba(160,107,255,.55); box-shadow: 0 14px 40px rgba(0,0,0,.5);
+    pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
+  #tip.show { opacity: 1; transform: none; }
+  #tip b { display: block; color: var(--accent); margin-bottom: 4px; font-size: 13px; }
+
+  /* ── 다음 단어 위젯 ── */
+  .prefix { font-family: "JetBrains Mono", monospace; font-size: 18px; margin: 6px 0 12px; }
+  .prefix .blank { display: inline-block; min-width: 90px; border-bottom: 2px solid var(--gold); color: var(--gold); text-align: center; transition: .3s; }
+  .cand { display: grid; grid-template-columns: 96px 1fr 58px; gap: 8px; align-items: center; margin: 5px 0; cursor: pointer; font-size: 14px; transition: opacity .3s; }
+  .cand .w { font-family: "JetBrains Mono", monospace; text-align: right; white-space: pre; overflow: hidden; }
+  .cand .bg { height: 20px; border-radius: 6px; background: rgba(255,255,255,.06); overflow: hidden; }
+  .cand .fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), var(--ai)); transition: width .45s; }
+  .cand.cut { opacity: .25; cursor: not-allowed; }
+  .cand.pick .fill { background: linear-gradient(90deg, var(--gold), #ff9f1c); box-shadow: 0 0 16px rgba(255,209,102,.6); }
+  .cand.spin .fill { background: #fff; }
+  .cand .p { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--sub); }
+
+  /* ── 기타 시각화 ── */
+  .tokens { line-height: 2.15; font-size: 15px; margin-top: 10px; }
+  .tokens span { padding: 2px 1px; border-radius: 4px; white-space: pre-wrap; cursor: default; }
+  .pert { font-size: 14px; border-left: 3px solid var(--line); padding: 4px 12px; margin: 8px 0; color: var(--sub); }
+  .pert mark { background: rgba(255,122,69,.25); color: #ffd9c7; border-radius: 3px; }
+  .bar { height: 14px; background: rgba(255,255,255,.07); border-radius: 7px; position: relative; margin: 8px 0 26px; }
+  .bar i { position: absolute; top: -5px; width: 3px; height: 24px; border-radius: 2px; }
+  .bar em { position: absolute; top: 21px; font-size: 11.5px; font-style: normal; transform: translateX(-50%); white-space: nowrap; }
+  .hbar { display: grid; grid-template-columns: 165px 1fr 56px; gap: 8px; align-items: center; font-size: 13.5px; margin: 5px 0; }
+  .hbar div { height: 14px; border-radius: 5px; background: rgba(255,255,255,.18); width: 0; transition: width 1s cubic-bezier(.2,.8,.2,1); }
+  .hbar.ours div { background: linear-gradient(90deg, var(--accent), var(--ai)); }
+  .race { display: grid; grid-template-columns: 130px 1fr 120px; gap: 10px; align-items: center; margin: 10px 0; font-size: 14px; }
+  .race .track { height: 22px; border-radius: 11px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .race .run { height: 100%; width: 0; border-radius: 11px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); }
+  .ktext { line-height: 2; font-size: 15px; background: rgba(0,0,0,.25); border-radius: 12px; padding: 14px; margin-top: 12px; }
+  .ktext .cm { background: rgba(255,122,69,.35); border-radius: 3px; padding: 0 2px; }
+  .ktext .sp { background: rgba(61,220,151,.3); border-radius: 3px; }
+  .ktext .jn { background: rgba(255,93,115,.4); border-radius: 3px; }
+  .quiz .opt { display: block; width: 100%; text-align: left; margin: 6px 0; }
+  .quiz .opt.right { border-color: var(--ok); background: rgba(61,220,151,.15); }
+  .quiz .opt.wrong { border-color: var(--bad); background: rgba(255,93,115,.12); }
+  .quiz .exp { margin-top: 8px; font-size: 14px; color: var(--sub); display: none; }
+  .gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+  .gloss div { background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; color: var(--sub); }
+  .gloss b { display: block; color: var(--ink); margin-bottom: 2px; }
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s, transform .8s cubic-bezier(.2,.8,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  footer { text-align: center; color: var(--dim); font-size: 13px; padding: 40px 16px 60px; border-top: 1px solid var(--line); }
+  footer a { color: var(--sub); }
+  @media (max-width: 600px) {
+    nav { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+    nav a { flex: none; }
+    .slider { grid-template-columns: 80px 1fr 46px; }
+    .hbar { grid-template-columns: 120px 1fr 48px; font-size: 12.5px; }
+    .race { grid-template-columns: 90px 1fr 80px; font-size: 12.5px; }
+    .cand { grid-template-columns: 76px 1fr 50px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .reveal { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="tip" role="tooltip"></div>
+
+<header class="hero">
+  <div class="floaters" id="floaters"></div>
+  <div class="hero-body">
+    <span class="eyebrow">논문 3편 · 실제 GPT-2 · 인터랙티브</span>
+    <h1>AI가 쓴 글,<br>어떻게 알아낼까?</h1>
+    <p class="prose">DetectGPT(2023), Fast-DetectGPT(2024), KatFishNet(2025) 논문 3편의 원리를 살펴봄. 브라우저에서 실제 GPT-2를 실행해 실험할 수 있음. 점선 밑줄이 있는 용어에 마우스를 올리면 설명이 표시됨.</p>
+    <div class="chips">
+      <a class="chip" href="#p1"><b>2023</b> DetectGPT</a>
+      <a class="chip" href="#p2"><b>2024</b> Fast-DetectGPT</a>
+      <a class="chip" href="#p3"><b>2025</b> KatFishNet</a>
+      <a class="chip" href="#lab">🧪 실험실</a>
+    </div>
+    <div class="scroll-hint">↓ 아래로 내려 시작</div>
+  </div>
+</header>
+
+<nav id="nav">
+  <a href="#basics">기초</a><a href="#p1">① DetectGPT</a><a href="#p2">② Fast</a><a href="#roc">판정선</a>
+  <a href="#lab">영어 실험실</a><a href="#p3">③ KatFishNet</a><a href="#klab">한국어 실험실</a><a href="#compare">비교·퀴즈</a><a href="#glossary">용어 사전</a>
+</nav>
+
+<main>
+
+<!-- ═════════ 0. 기초 ═════════ -->
+<section id="basics" class="prose-sec">
+  <span class="eyebrow">Step 0 · 기초</span>
+  <h2>언어 모델은 다음 단어의 확률을 계산함</h2>
+  <div class="card reveal"><p class="prose">언어 모델은 앞에 나온 단어를 보고 다음에 올 토큰마다 확률을 매김. 휴대폰 자판의 자동완성이 다음 단어 3개를 추천한다면, 언어 모델은 후보 전체에 점수를 매김. GPT-2의 후보는 50,257개 토큰임.</p></div>
+  <div class="card glow reveal">
+    <div class="row" style="justify-content:space-between;margin-top:0">
+      <h3 style="margin:0">다음 단어 고르기 실험</h3>
+      <span class="badge fake" id="nwBadge">가상 수치</span>
+    </div>
+    <p class="muted prose">아래 막대를 눌러 단어를 골라 보세요. 모델이 예상한 평균보다 얼마나 그럴듯한 단어인지 점수로 보여 줌. k 슬라이더를 줄이면 확률이 높은 후보 k개만 남기는 top-k 샘플링이 됨. '모델처럼 뽑기' 버튼은 남은 후보를 확률에 따라 뽑음.</p>
+    <div class="prefix"><span id="nwPrefix">The cat sat on the</span> <span class="blank" id="nwBlank">?</span></div>
+    <div id="nwBars"></div>
+    <div class="slider"><span>top-k (k)</span><input type="range" id="nwK" min="1" max="10" value="10"><output id="nwKo">10</output></div>
+    <div class="row">
+      <button class="primary" id="nwSample">🎲 모델처럼 뽑기</button>
+      <button id="nwSample20">20번 뽑기</button>
+      <span class="muted" id="nwTally"></span>
+    </div>
+    <div class="stat">
+      <div><b id="nwLp">–</b><span>고른 단어의 log p</span></div>
+      <div><b id="nwMean">–</b><span>모델이 예상한 평균 log p</span></div>
+      <div><b id="nwZ">–</b><span>점수 z = (log p − 평균) ÷ 표준편차</span></div>
+    </div>
+    <div class="row">
+      <input type="text" id="nwInput" value="The cat sat on the" style="flex:1;min-width:200px">
+      <button id="nwReal" disabled>GPT-2로 직접 계산</button>
+    </div>
+    <p class="tiny prose">이 위젯의 확률값은 설명을 위해 만든 가상 수치임. 아래 실험실에서 모델을 내려받으면 'GPT-2로 직접 계산' 버튼으로 실제 확률을 볼 수 있음.</p>
+  </div>
+  <div class="card reveal"><p class="prose">💡 사람은 하고 싶은 말에 맞춰 단어를 고르므로 확률이 낮은 단어도 씀. 모델은 확률에 따라 단어를 뽑음. top-k를 쓰면 확률이 낮은 후보를 제외하므로 높은 확률의 단어만 남음. 논문 3편 중 앞의 2편은 이 차이를 이용함.</p></div>
+</section>
+
+<!-- ═════════ 1. DetectGPT ═════════ -->
+<section id="p1" class="prose-sec">
+  <span class="eyebrow">논문 ① · ICML 2023</span>
+  <h2>DetectGPT — 글을 바꿔 확률 비교</h2>
+  <div class="meta">Mitchell, Lee, Khazatsky, Manning, Finn · Stanford University</div>
+  <div class="card reveal analogy"><div class="lbl">🏔 비유 · 눈을 가리고 산 위에 서기</div><p class="prose" style="margin:6px 0 0">눈을 가리고 산 위에 섰다고 해 봅시다. 사방으로 한 발씩 움직였을 때 어느 쪽으로 가도 내려간다면 꼭대기에 가까움. 비탈에서는 올라가는 방향과 내려가는 방향이 있음. DetectGPT에서 산의 높이는 모델이 매긴 로그 확률임. 한 발 움직이는 일은 단어 몇 개를 바꿔 쓰는 섭동에 해당함.</p></div>
+  <div class="card glow reveal">
+    <h3 style="margin-top:0">확률 지형 체험</h3>
+    <p class="muted prose">흰 점을 좌우로 끌어 글의 위치를 옮기고 '바꿔 쓰기'를 눌러 변형 글을 만들어 보세요. 평균 하락폭 d가 클수록 봉우리에 가까움. 보폭 슬라이더는 바꾸는 단어의 양을 나타냄.</p>
+    <svg id="land" viewBox="0 0 720 280" role="img" aria-label="가상 확률 지형" style="touch-action:none"></svg>
+    <div class="slider"><span>보폭</span><input type="range" id="stepSz" min="1" max="12" value="5"><output id="stepO">5</output></div>
+    <div class="row">
+      <button class="primary" id="shake">✏️ 바꿔 쓰기 ×16</button>
+      <button id="toPeak">AI 글 위치로</button>
+      <button id="toSlope">사람 글 위치로</button>
+    </div>
+    <div class="stat">
+      <div><b id="landD">–</b><span>평균 하락폭 d (가상 단위)</span></div>
+      <div><b id="landC" style="font-size:17px">–</b><span>이 자리의 곡률</span></div>
+    </div>
+    <p class="tiny prose">이 지형은 원리를 보여 주려고 만든 가상 곡선임. 실제 글의 지형은 수만 차원이라 그림으로 그릴 수 없음.</p>
+  </div>
+  <div class="card reveal">
+    <h3 style="margin-top:0">수식 · 원문과 변형 글의 차이(섭동 불일치)</h3>
+    <div class="formula">d(x) = log p<sub>θ</sub>(<span class="hl-ai">x</span>) − 𝔼<sub>x̃∼q(·|x)</sub>[ log p<sub>θ</sub>(<span class="hl-h">x̃</span>) ]</div>
+    <p class="prose">d는 원문의 로그 확률에서 변형 글들의 평균 로그 확률을 뺀 값임. 논문은 모델이 쓴 글은 d가 뚜렷한 양수이고 사람 글은 0에 가깝다는 가설을 세움.</p>
+    <p class="muted prose">이 값은 로그 확률이 여러 방향으로 얼마나 휘는지와 관련이 있음. 정확히는 헤시안 대각합에 음수를 붙인 값의 근사임. 허친슨 대각합 추정과 유한 차분 근사를 합치면 같은 형태의 식을 얻음. 곡률이 크게 음수인 곳이 봉우리임.</p>
+    <div class="steps">
+      <div class="step prose"><b>1</b>섭동 · T5가 2단어 구간을 가려 전체 단어의 15%를 다시 채운 변형 글을 100개 만듦.</div>
+      <div class="step prose"><b>2</b>채점 · 채점 모델로 원문과 변형 글 100개의 로그 확률을 계산함. 모델을 100번 넘게 호출해야 함.</div>
+      <div class="step prose"><b>3</b>비교 · d를 변형 글 점수의 표준편차로 나눔. 이 값이 임계값보다 크면 AI 글로 판정함. 표준편차로 나누면 AUROC가 약 0.02 오름.</div>
+    </div>
+    <h3>결과</h3>
+    <p class="prose">뉴스 데이터(XSum)에서 평균 AUROC 0.97로, 기존 방법 중 가장 좋았던 LogRank(0.87)를 앞질렀음. 15개 조합(모델 5개 × 데이터 3종) 중 14개에서 1위를 차지함.</p>
+    <div class="note warn prose">⚠️ 글 하나에 모델을 100번 넘게 호출해야 하므로 느림. 글을 쓴 것으로 의심되는 모델의 확률도 직접 계산할 수 있어야 함. 무작위 단어로 바꾸면 사람 글도 확률이 떨어지므로 T5처럼 뜻을 지키며 바꿔 써야 함.</div>
+  </div>
+</section>
+
+<!-- ═════════ 2. Fast-DetectGPT ═════════ -->
+<section id="p2" class="prose-sec">
+  <span class="eyebrow">논문 ② · ICLR 2024</span>
+  <h2>Fast-DetectGPT — 단어마다 확률 비교</h2>
+  <div class="meta">Bao, Zhao, Teng, Yang, Zhang · Westlake University 외</div>
+  <div class="card reveal analogy"><div class="lbl">📝 비유 · 객관식 답안지 비교</div><p class="prose" style="margin:6px 0 0">시험지 50문항의 답안을 보고 누가 풀었는지 맞힌다고 해 봅시다. 한 답안지는 모든 문항에서 반 친구 대부분이 고른 보기를 고르고, 다른 답안지는 가끔 아무도 고르지 않은 보기를 고름. 첫 번째 답안지가 다수결을 따르는 기계의 것일 가능성이 큼. Fast-DetectGPT는 각 단어를 모델이 예상한 후보와 비교해 얼마나 가능성이 높은 단어였는지 살펴봄.</p></div>
+  <div class="card reveal">
+    <p class="prose">핵심은 앞 문맥을 원문 그대로 두는 것임. DetectGPT는 글을 바꿔 쓸 때마다 처음부터 다시 채점함. Fast-DetectGPT는 원문의 앞 문맥을 유지한 채 j번째 자리의 후보를 비교함. 그래서 모델을 한 번 호출해 얻은 확률표로 모든 자리의 후보를 계산할 수 있음.</p>
+    <div class="formula">d(x) = ( log p<sub>θ</sub>(x | x) − μ̃ ) ÷ σ̃ &nbsp;,&nbsp; μ̃ = Σ<sub>j</sub> Σ<sub>v</sub> p(v | x<sub>&lt;j</sub>) · log p(v | x<sub>&lt;j</sub>)</div>
+    <p class="muted prose">μ̃는 각 자리에서 모델이 예상하는 로그 확률의 평균임. σ̃는 그 값들이 퍼진 정도임. 분자는 로그 가능도와 엔트로피를 더한 값과 같음. 논문은 이 식이 기존의 2가지 기준을 합친 형태라고도 설명함.</p>
+    <p class="muted prose">논문 Figure 1에서 모델이 쓴 글은 d가 3 근처에, 사람 글은 0 근처에 모였음.</p>
+  </div>
+  <div class="card glow reveal">
+    <h3 style="margin-top:0">속도 경주 · 글 1편 검사</h3>
+    <p class="muted prose">같은 데이터를 A100 GPU로 처리하는 데 DetectGPT는 79,113초(약 22시간), Fast-DetectGPT는 233초(약 4분)가 걸림. Fast-DetectGPT가 약 340배 빠름.</p>
+    <div class="race"><span>DetectGPT</span><div class="track"><div class="run" id="rD" style="background:linear-gradient(90deg,#6e7499,#a3a9c9)"></div></div><span class="num" id="rDc">호출 0번</span></div>
+    <div class="race"><span>Fast-DetectGPT</span><div class="track"><div class="run" id="rF" style="background:linear-gradient(90deg,var(--accent),var(--ai))"></div></div><span class="num" id="rFc">호출 0번</span></div>
+    <div class="row"><button class="primary" id="raceGo">🏁 경주 시작</button><span class="tiny">막대 길이는 논문 측정 시간(79,113초 : 233초)을 6초로 줄인 비율</span></div>
+  </div>
+  <div class="card reveal">
+    <h3 style="margin-top:0">정확도 (AUROC)</h3>
+    <p class="prose">오픈소스 모델 5개의 글에서 AUROC가 0.955에서 0.989로 올랐음. ChatGPT와 GPT-4의 글을 대리 모델로 검사했을 때는 0.723에서 0.934로 올랐음. 논문은 이를 남은 개선 여지 대비 약 75% 향상이라고 표현함.</p>
+    <div class="hbar"><span>DetectGPT · 오픈소스 5종</span><div data-w="95.5"></div><span class="num">0.955</span></div>
+    <div class="hbar ours"><span>Fast · 오픈소스 5종</span><div data-w="98.9"></div><span class="num">0.989</span></div>
+    <div class="hbar"><span>DetectGPT · ChatGPT/GPT-4</span><div data-w="72.3"></div><span class="num">0.723</span></div>
+    <div class="hbar ours"><span>Fast · ChatGPT/GPT-4</span><div data-w="93.4"></div><span class="num">0.934</span></div>
+    <div class="note warn prose">⚠️ 블랙박스 상황에서는 대신 검사하는 대리 모델이 해당 언어와 분야를 잘 알아야 함. 논문은 하나의 모델이 모든 언어와 분야를 다룰 수는 없다고 설명함.</div>
+  </div>
+</section>
+
+<!-- ═════════ ROC ═════════ -->
+<section id="roc" class="prose-sec">
+  <span class="eyebrow">잠깐 · 평가 방법</span>
+  <h2>판정선은 어디에 그을까?</h2>
+  <div class="card reveal"><p class="prose">점수 d가 나오면 몇 점부터 AI 글로 볼지 판정선을 정해야 함. 판정선을 낮추면 AI 글을 더 많이 찾지만 사람 글을 AI 글로 잘못 판정하는 경우도 늘어남. 판정선을 높이면 반대임. ROC 곡선은 판정선을 바꾸면서 이 두 비율이 어떻게 달라지는지 보여 줌. 곡선 아래 넓이가 AUROC임.</p></div>
+  <div class="card glow reveal">
+    <p class="muted prose">판정선 슬라이더를 움직여 오탐률(사람 글을 AI로 판정한 비율)과 탐지율이 어떻게 바뀌는지 보세요. 분포 간격을 줄이면 두 무리가 겹쳐서 AUROC가 0.5에 가까워짐.</p>
+    <div class="grid2" style="grid-template-columns:2fr 1fr">
+      <svg id="dist" viewBox="0 0 520 240"></svg>
+      <svg id="rocSvg" viewBox="0 0 240 240"></svg>
+    </div>
+    <div class="slider"><span>판정선</span><input type="range" id="thr" min="-3" max="7" step="0.1" value="1.5"><output id="thrO">1.5</output></div>
+    <div class="slider"><span>분포 간격</span><input type="range" id="gap" min="0" max="5" step="0.1" value="3"><output id="gapO">3.0</output></div>
+    <div class="stat">
+      <div><b id="tpr" style="color:var(--ai)">–</b><span>탐지율 (AI 글을 AI로)</span></div>
+      <div><b id="fpr" style="color:var(--human)">–</b><span>오탐률 (사람 글을 AI로)</span></div>
+      <div><b id="auc" style="color:var(--gold)">–</b><span>AUROC</span></div>
+    </div>
+    <p class="tiny prose">이 그림의 2개 분포는 설명용 가상 분포임.</p>
+  </div>
+  <div class="card reveal note prose">🏫 학교에서 쓴다면 사람 글을 AI 글로 잘못 판정하는 오탐률이 특히 중요함. 오탐률이 1%면 사람이 쓴 글 100편 중 1편이 AI 글로 잘못 판정됨.</div>
+</section>
+
+<!-- ═════════ 영어 실험실 ═════════ -->
+<section id="lab" class="prose-sec">
+  <span class="eyebrow">실험 · 논문 ①②</span>
+  <h2>영어 실험실 — 실제 GPT-2로 계산</h2>
+  <div class="card glow reveal">
+    <p class="prose">오픈소스 GPT-2(파라미터 1억 2,400만 개, 채점용)와 T5-small(섭동용)을 이 브라우저에 내려받아 실행함. 입력한 글은 서버로 전송되지 않음.</p>
+    <div class="row">
+      <button class="primary" id="load">⬇️ 모델 내려받기 (약 210MB, 처음 한 번)</button>
+      <span class="muted" id="loadMsg">아직 모델이 없음</span>
+    </div>
+    <progress id="loadBar" value="0" max="100" hidden></progress>
+    <div class="note prose">GPT-2는 영어 모델임. GPT-2가 쓴 글을 같은 GPT-2로 검사할 때(화이트박스) 가장 잘 맞음. ChatGPT처럼 다른 모델의 글은 대리 모델로 검사하므로 정확도가 떨어짐. 논문은 T5-3B와 섭동 100개를 사용했음. 여기서는 T5-small과 섭동 5~40개를 쓰므로 DetectGPT 점수가 논문보다 많이 흔들림.</div>
+  </div>
+
+  <div class="card reveal">
+    <h3 style="margin-top:0">1. 검사할 글</h3>
+    <textarea id="txt" placeholder="영어 글을 붙여 넣거나 아래 버튼으로 채우기 (50~150단어 권장)"></textarea>
+    <div class="row">
+      <button id="gen" disabled>🤖 GPT-2에게 글 쓰게 하기</button>
+      <button id="humanBtn">🧑 사람 글 예시 넣기</button>
+      <span class="muted" id="genMsg"></span>
+    </div>
+    <p class="tiny prose">사람 글 예시는 마크 트웨인의 Life on the Mississippi(1883, 저작권 만료) 한 대목임. GPT-2가 학습 중에 이처럼 유명한 고전을 봤을 가능성이 커서 평범한 사람 글보다 점수가 높게 출력됨. 직접 쓴 영어 글도 넣어 보세요.</p>
+  </div>
+
+  <div class="card reveal">
+    <h3 style="margin-top:0">2. Fast-DetectGPT · 모델 호출 1번</h3>
+    <div class="row" style="margin-top:0"><button class="primary" id="runFast" disabled>⚡ Fast-DetectGPT 실행</button><span class="muted" id="fastMsg"></span></div>
+    <div id="fastOut" hidden>
+      <div class="stat">
+        <div><b id="fD">–</b><span>조건부 확률 곡률 d</span></div>
+        <div><b id="fLL">–</b><span>평균 log p</span></div>
+        <div><b id="fEnt">–</b><span>평균 엔트로피</span></div>
+        <div><b id="fRank">–</b><span>평균 로그 순위</span></div>
+      </div>
+      <h3>d 값의 위치</h3>
+      <div class="bar" id="fBar"></div>
+      <p class="tiny prose" style="margin-top:30px">0과 3은 논문 Figure 1에서 사람 글과 AI 글이 모인 자리이고 고정된 판정 기준은 아님. 이 페이지에서 직접 재 보니 GPT-2가 top-k 40으로 쓴 글 12편은 3.4~6.2, 고전 대목 4개는 1.5~2.7이었음. top-k 없이 쓴 GPT-2 글 4편은 −1.2~1.6으로 0 근처였음. AI 글이라도 생성 방식에 따라 점수가 달라짐.</p>
+      <h3>토큰별로 보기</h3>
+      <p class="muted prose">붉을수록 모델이 예상한 평균보다 그럴듯하게 본 단어이고 푸를수록 모델이 예상하지 못한 단어임. 토큰에 마우스를 올리면 수치와 모델이 1순위로 꼽은 단어가 표시됨.</p>
+      <div class="tokens" id="fTok"></div>
+    </div>
+  </div>
+
+  <div class="card reveal">
+    <h3 style="margin-top:0">3. DetectGPT · 글을 바꿔 다시 채점</h3>
+    <div class="row" style="margin-top:0">
+      <label>섭동 개수 k <select id="k"><option>5</option><option selected>10</option><option>20</option><option>40</option></select></label>
+      <button class="primary" id="runDet" disabled>🔁 DetectGPT 실행</button>
+      <span class="muted" id="detMsg"></span>
+    </div>
+    <progress id="detBar" value="0" max="100" hidden></progress>
+    <div id="detOut" hidden>
+      <div class="stat">
+        <div><b id="dD">–</b><span>정규화 섭동 불일치 d/σ</span></div>
+        <div><b id="dO">–</b><span>원문 평균 log p</span></div>
+        <div><b id="dM">–</b><span>변형 글 평균 log p</span></div>
+        <div><b id="dT" style="font-size:18px">–</b><span>걸린 시간 · 모델 호출 수</span></div>
+      </div>
+      <h3>원문과 변형 글의 log p</h3>
+      <svg id="detPlot" viewBox="0 0 720 120"></svg>
+      <p class="muted prose">점 하나가 변형 글 하나임. 붉은 선(원문)이 점들보다 오른쪽에 멀리 있을수록 봉우리에 있다는 뜻임.</p>
+      <h3>T5가 바꿔 쓴 글 (처음 3개)</h3>
+      <div id="detPerts"></div>
+    </div>
+  </div>
+
+  <div class="card reveal">
+    <h3 style="margin-top:0">4. 결과 기록</h3>
+    <p class="muted prose">실행할 때마다 결과가 아래 표에 기록됨. AI 글과 사람 글을 여러 편 검사해서 점수가 두 무리로 나뉘는지 확인해 보세요.</p>
+    <svg id="histPlot" viewBox="0 0 720 150"></svg>
+    <div style="overflow-x:auto"><table id="histTbl"><tr><th>#</th><th>글 종류</th><th>글 앞부분</th><th>Fast d</th><th>DetectGPT d/σ</th></tr></table></div>
+  </div>
+</section>
+
+<!-- ═════════ 3. KatFishNet ═════════ -->
+<section id="p3" class="prose-sec">
+  <span class="eyebrow">논문 ③ · ACL 2025</span>
+  <h2>KatFishNet — 한국어 글쓰기 습관 비교</h2>
+  <div class="meta">박신우, 김수빈, 김도경, 한요섭 · 연세대학교</div>
+  <div class="card reveal analogy"><div class="lbl">✍️ 비유 · 필적 감정</div><p class="prose" style="margin:6px 0 0">필적 감정사는 획을 꺾는 곳이나 받침을 쓰는 모양처럼 글씨 습관을 봄. KatFishNet도 한국어 글의 띄어쓰기와 쉼표 사용 습관을 셈. 글의 확률을 계산하는 앞의 두 방법과는 다른 방식임.</p></div>
+  <div class="card reveal">
+    <p class="prose">한국어는 띄어쓰기 규칙에 예외가 많고 조사와 어미가 풍부함. 영어보다 쉼표도 적게 씀. 그래서 영어 중심 탐지법이 한국어에 그대로 통하지 않을 수 있음. 이 논문의 실험에서 DetectGPT의 한국어 논설문 AUROC는 45.8%로 동전 던지기 수준(50%)보다 낮았음.</p>
+    <p class="muted prose">연구팀은 한국어 AI 글 탐지용 데이터셋 KatFish를 처음 만듦. 사람 글 470편과 LLM 4종(GPT-4o, Solar, Qwen2 72B, Llama3.1 70B)의 글 1,624편을 합친 2,094편임. 장르는 논설문, 시, 논문 초록 3가지임.</p>
+  </div>
+  <div class="grid3 reveal">
+    <div class="card"><h3 style="margin-top:0">␣ 띄어쓰기</h3><p class="muted prose">의존 명사(것, 수, 줄)와 보조 용언(있다, 않다) 앞을 띄어 쓴 비율을 봄. LLM은 맞춤법 규칙을 엄격히 지키는 편이고 사람은 읽기 편하게 하거나 규칙을 잘 몰라 붙여 쓰기도 함. LLM 논설문의 의존 명사 앞 띄어쓰기 비율은 표준편차가 0.02일 만큼 일정했음.</p></div>
+    <div class="card"><h3 style="margin-top:0">🧩 품사 조합</h3><p class="muted prose">문장을 품사의 나열로 바꾼 뒤 서로 다른 n-gram의 비율을 셈. 실험에서는 사람이 더 다양한 문장 구조를 썼고 LLM은 자주 쓰는 구조를 반복하는 경향이 있었음.</p></div>
+    <div class="card"><h3 style="margin-top:0">, 쉼표</h3><p class="muted prose">쉼표가 든 문장의 비율과 쉼표의 빈도·위치, 쉼표로 나뉜 구간의 길이, 앞뒤 품사 조합의 다양성을 봄. 실험에서 LLM은 사람보다 쉼표를 더 자주, 더 뒤쪽에 썼음. 연구팀은 영어가 많은 학습 데이터의 영향으로 봄.</p></div>
+  </div>
+  <div class="card glow reveal">
+    <p class="prose">이렇게 센 수치를 묶어 로지스틱 회귀로 분류함. GPT-4o 글과 사람 글 80%를 학습에 사용함. 평가는 학습에 쓰지 않은 LLM(Solar, Qwen2, Llama3.1)의 글과 나머지 사람 글 20%로 진행함. 학습에 없던 모델의 글도 구별하는지 확인하는 설계임.</p>
+    <div class="tabs" id="genreTabs">
+      <button data-g="essay" class="on">논설문</button><button data-g="poetry">시</button><button data-g="abstract">논문 초록</button>
+    </div>
+    <h3>쉼표 사용 비교 (논문 Table 2)</h3>
+    <div style="overflow-x:auto"><table id="commaTbl"></table></div>
+    <h3>탐지 성능 (논문 Table 3, 평균 AUROC %)</h3>
+    <div id="kBars"></div>
+    <p class="prose">쉼표 특징만 쓴 KatFishNet이 3개 장르 모두에서 1위였음. AUC-ROC가 기존 최고 방법보다 평균 19.78% 높았음. 연구팀은 쉼표가 글쓴이의 의도와 문맥에 따라 크게 달라지므로 LLM이 배우기 가장 어려운 습관이라고 해석함.</p>
+    <p class="muted prose">시에서는 사람과 LLM의 차이가 작았음. 시는 문장이 짧고 단순해서 쉼표 차이가 잘 드러나지 않음.</p>
+    <div class="note warn prose">⚠️ 한계도 있음. 장르가 3가지뿐이고 사람과 AI가 섞어 쓴 글은 다루지 않았음. 형태소 분석기의 정확도에도 성능이 좌우됨.</div>
+  </div>
+</section>
+
+<!-- ═════════ 한국어 실험실 ═════════ -->
+<section id="klab" class="prose-sec">
+  <span class="eyebrow">실험 · 논문 ③</span>
+  <h2>한국어 실험실 — 쉼표와 띄어쓰기 측정</h2>
+  <div class="card glow reveal">
+    <p class="prose">한국어 글을 넣으면 쉼표와 띄어쓰기 습관을 세어 논문의 평균과 비교함. 글 속 쉼표는 주황색, 띄어 쓴 자리는 초록색, 붙여 쓴 자리는 빨간색으로 표시됨.</p>
+    <textarea id="ktxt" placeholder="한국어 글 붙여 넣기 (5문장 이상 권장)"></textarea>
+    <div class="row">
+      <button class="primary" id="krun">🔍 특징 분석</button>
+      <button id="kS1">예시 A · 쉼표 적고 붙여 쓴 글</button>
+      <button id="kS2">예시 B · 쉼표 많고 띄어 쓴 글</button>
+    </div>
+    <p class="tiny prose">2개 예시는 논문이 보고한 경향을 보여 주려고 만든 글임. 실제 학생 글이나 LLM 출력이 아님.</p>
+    <div id="kOut" hidden>
+      <div class="ktext" id="kMarked"></div>
+      <div class="stat">
+        <div><b id="kSent">–</b><span>문장 수</span></div>
+        <div><b id="kInc">–</b><span>쉼표 포함 문장 비율</span></div>
+        <div><b id="kSeg">–</b><span>쉼표 구간 평균 길이(어절)</span></div>
+        <div><b id="kSp">–</b><span>의존 명사·보조 용언 앞을 띄어 쓴 비율</span></div>
+      </div>
+      <h3>쉼표 포함 문장 비율 · 논문 논설문 평균과 비교</h3>
+      <div class="bar" id="kBar"></div>
+      <p class="muted" style="margin-top:30px" id="kDetail"></p>
+    </div>
+    <div class="note prose">이 실험은 논문을 간단히 따라 한 근사임. 논문은 형태소 분석기(Bareun, Kkma)로 품사를 붙이고 분류기를 학습했음. 여기서는 형태소 분석기 없이 쉼표와 몇 가지 띄어쓰기 패턴('~ㄹ 수 있다', '~ㄴ 것', '~고 있다', '~지 않다' 등)만 셈. 품사 n-gram 다양성은 계산하지 않음. 따라서 AI 여부를 판정하지 않고 지표만 보여 줌.</div>
+  </div>
+</section>
+
+<!-- ═════════ 비교 · 퀴즈 ═════════ -->
+<section id="compare" class="prose-sec">
+  <span class="eyebrow">정리</span>
+  <h2>세 방법 비교</h2>
+  <div class="card reveal" style="overflow-x:auto">
+    <table>
+      <tr><th></th><th style="color:var(--ai)">DetectGPT</th><th style="color:var(--accent)">Fast-DetectGPT</th><th style="color:var(--human)">KatFishNet</th></tr>
+      <tr><td><b>보는 것</b></td><td>글 전체를 바꿔 썼을 때 확률이 얼마나 떨어지는가</td><td>자리마다 실제 단어가 후보들보다 얼마나 그럴듯한가</td><td>띄어쓰기, 품사 조합, 쉼표 습관</td></tr>
+      <tr><td><b>필요한 것</b></td><td>채점 모델과 섭동 모델(T5)</td><td>채점 모델 하나(샘플링 모델을 따로 둘 수도 있음)</td><td>형태소 분석기와 학습용 글</td></tr>
+      <tr><td><b>학습</b></td><td>필요 없음(제로샷)</td><td>필요 없음(제로샷)</td><td>가벼운 분류기 학습(CPU로 가능)</td></tr>
+      <tr><td><b>비용</b></td><td>글 하나에 모델 호출 약 100번</td><td>글 하나에 모델 호출 1번</td><td>언어 모델 없이 계산</td></tr>
+      <tr><td><b>약점</b></td><td>느리고 모델의 확률을 볼 수 있어야 함</td><td>대리 모델이 그 언어와 분야를 알아야 함</td><td>한국어 전용이고 장르 3가지로만 검증함</td></tr>
+    </table>
+  </div>
+  <div class="card reveal note warn prose">⚖️ 어떤 탐지기도 완벽하지 않음. 탐지 점수는 의심해 볼 근거일 뿐 확정 판정이 아님. 영어가 모국어가 아닌 사람의 글을 AI 글로 잘못 판정하는 경향이 있다는 연구도 있음. 점수 하나로 학생의 부정행위를 단정해서는 안 됨.</div>
+
+  <h2 style="margin-top:60px">확인 퀴즈</h2>
+  <div class="grid2 quiz" id="quiz"></div>
+  <p class="muted" id="quizScore" style="text-align:center;margin-top:14px"></p>
+</section>
+
+<!-- ═════════ 용어 사전 ═════════ -->
+<section id="glossary">
+  <span class="eyebrow">부록</span>
+  <h2>용어 사전</h2>
+  <div class="gloss reveal" id="gloss"></div>
+</section>
+</main>
+
+<footer>
+  참고 논문 · Mitchell et al., <i>DetectGPT</i>, ICML 2023 · Bao et al., <i>Fast-DetectGPT</i>, ICLR 2024 · Park et al., <i>KatFishNet</i>, ACL 2025<br>
+  모델 · <a href="https://huggingface.co/Xenova/gpt2" target="_blank" rel="noopener">Xenova/gpt2</a>, <a href="https://huggingface.co/Xenova/t5-small" target="_blank" rel="noopener">Xenova/t5-small</a> · 실행 · <a href="https://github.com/huggingface/transformers.js" target="_blank" rel="noopener">transformers.js</a>
+</footer>
+
+<script type="module">
+// ═══════════ 공통 도우미 ═══════════
+const $ = (id) => document.getElementById(id);
+const fmt = (v, n = 2) => Number.isFinite(v) ? v.toFixed(n) : '–';
+const tick = () => new Promise((r) => setTimeout(r, 0));   // 화면이 갱신될 틈을 줌
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(parent, tag, attrs, text) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const key in attrs) {
+    el.setAttribute(key, attrs[key]);
+  }
+  if (text !== undefined) {
+    el.textContent = text;
+  }
+  parent.appendChild(el);
+  return el;
+}
+function placeMarks(bar, min, max, marks) {
+  bar.innerHTML = '';
+  for (const mark of marks) {
+    const left = Math.min(100, Math.max(0, ((mark.value - min) / (max - min)) * 100));
+    bar.insertAdjacentHTML('beforeend', `<i style="left:${left}%;background:${mark.color}"></i><em style="left:${left}%;color:${mark.color}">${mark.label}</em>`);
+  }
+}
+
+// ═══════════ 용어 사전 · 툴팁 ═══════════
+// [본문에서 찾을 표기, 사전 제목, 설명] — 긴 표기부터 찾도록 아래에서 정렬
+const TERMS = [
+  ['언어 모델', '언어 모델', "앞에 나온 글을 보고 다음 단어가 무엇일지 확률로 예측하는 프로그램임. GPT, Claude, Gemini 모두 언어 모델임."],
+  ['LLM', 'LLM (대형 언어 모델)', "파라미터가 수십억 개 이상인 큰 언어 모델임."],
+  ['토큰', '토큰', "언어 모델이 글을 자르는 단위임. 영어에서는 보통 단어 하나나 단어 조각 하나가 토큰 하나임. 예를 들어 steamboat는 steam과 boat 토큰 2개로 나뉨."],
+  ['로그 확률', '로그 확률 (log p)', "확률에 로그를 취한 값임. 확률 1은 0, 0.5는 약 −0.69, 0.01은 약 −4.6이 됨. 값이 0에 가까울수록 모델이 높은 확률을 매겼다는 뜻임. 여러 단어의 확률을 곱하는 대신 로그 확률을 더할 수 있어 계산이 편해짐."],
+  ['섭동', '섭동 (perturbation)', "원래 것을 조금 바꾸는 일임. 여기서는 글의 단어 일부를 다른 단어로 바꿔 쓴 변형을 뜻함."],
+  ['곡률', '곡률', "곡선이 얼마나 휘었는지 나타내는 값임. 위로 볼록한 봉우리 모양은 음수, 아래로 볼록한 골짜기 모양은 양수임. Fast-DetectGPT 논문은 부호를 뒤집어 같은 상황을 양의 곡률이라고 부름."],
+  ['헤시안', '헤시안 · 대각합', "여러 방향으로 얼마나 휘어지는지 2차 미분 값들을 표(행렬)로 모은 것임. 대각합은 이 표의 대각선에 놓인 값을 모두 더한 것임."],
+  ['허친슨', '허친슨 대각합 추정', "무작위 방향을 여러 번 골라 각 방향의 휘어짐을 평균 내고 대각합을 추정하는 1990년의 통계 기법임."],
+  ['T5', 'T5', "구글이 만든 언어 모델임. 문장의 빈칸을 채우는 일을 잘해서 바꿔 쓰기 도구로 씀."],
+  ['마스크', '마스크 채움', "문장 일부를 가리고(마스크) 모델이 그 자리에 들어갈 말을 채우게 하는 것임."],
+  ['제로샷', '제로샷 (zero-shot)', "탐지용으로 따로 학습하지 않고 이미 있는 모델을 그대로 쓰는 방식임. 새 AI 모델이 나와도 다시 학습할 필요가 없음."],
+  ['화이트박스', '화이트박스', "글을 쓴 바로 그 모델로 확률을 계산할 수 있는 상황임."],
+  ['블랙박스', '블랙박스', "글을 쓴 모델에 접근할 수 없어서 다른 모델로 대신 계산하는 상황임. ChatGPT 글을 GPT-2로 검사하는 경우가 여기에 해당함."],
+  ['대리 모델', '대리 모델', "원래 모델 대신 점수를 계산하는 다른 모델임."],
+  ['AUROC', 'AUROC', "무작위로 AI 글 하나와 사람 글 하나를 뽑았을 때 탐지기가 AI 글에 더 높은 점수를 줄 확률임. 1이면 완벽하고 0.5면 동전 던지기 수준임."],
+  ['AUC-ROC', 'AUC-ROC (= AUROC)', "무작위로 AI 글 하나와 사람 글 하나를 뽑았을 때 탐지기가 AI 글에 더 높은 점수를 줄 확률임. 1이면 완벽하고 0.5면 동전 던지기 수준임."],
+  ['임계값', '임계값 · 판정선', "점수가 이 값보다 크면 AI 글로 판정하는 기준선임."],
+  ['판정선', '판정선 · 임계값', "점수가 이 값보다 크면 AI 글로 판정하는 기준선임."],
+  ['엔트로피', '엔트로피', "모델이 다음 단어 후보에 매긴 확률이 얼마나 고르게 퍼져 있는지 나타내는 값임. 후보 하나의 확률이 대부분이면 낮고 여러 후보의 확률이 비슷하면 높음."],
+  ['LogRank', 'LogRank · 로그 순위', "실제 단어가 모델의 후보 목록에서 몇 위였는지를 봄. 1위면 로그 순위는 0임. AI 글은 대체로 순위가 높음."],
+  ['로그 순위', '로그 순위', "실제 단어가 모델의 후보 목록에서 몇 위였는지를 봄. 1위면 로그 순위는 0임. AI 글은 대체로 순위가 높음."],
+  ['표준편차', '표준편차', "값들이 평균 주변에 얼마나 퍼져 있는지 나타내는 수치임. 이 값으로 나누면 글마다 다른 점수의 퍼짐을 맞춰 비교할 수 있음(정규화)."],
+  ['top-k', 'top-k 샘플링', "확률 상위 k개 후보 안에서만 다음 단어를 뽑는 방법임. 엉뚱한 단어가 덜 나오지만 글이 더 예측하기 쉬워짐."],
+  ['파라미터', '파라미터', "모델이 학습으로 정한 숫자들임. 많을수록 모델이 큼."],
+  ['지도학습', '지도학습 탐지기', "사람 글과 AI 글에 정답을 붙여 학습시킨 분류기임. 학습한 종류의 글에는 강하지만 처음 보는 분야나 언어에는 약함."],
+  ['형태소', '형태소', "뜻을 가진 가장 작은 말 단위임. 예를 들어 '먹었다'는 '먹-', '-었-', '-다'로 나뉨."],
+  ['품사', '품사', "단어의 문법적 갈래임. 명사, 동사, 조사 같은 것이 품사임."],
+  ['n-gram', 'n-gram', "연속한 n개의 묶음임. 품사 3-gram이면 '명사-조사-동사'처럼 품사 3개가 이어진 묶음임."],
+  ['의존 명사', '의존 명사', "혼자 쓰이지 못하고 앞말의 꾸밈을 받아야 하는 명사임(것, 수, 줄, 때문). 맞춤법상 띄어 씀. 띄어쓰기 오류의 약 70%가 여기서 발생함."],
+  ['보조 용언', '보조 용언', "본용언 뒤에서 뜻을 보태는 말임. '먹고 있다'의 '있다'가 보조 용언임. 띄어 쓰는 것이 원칙이고 경우에 따라 붙여 쓰는 것도 허용됨."],
+  ['로지스틱 회귀', '로지스틱 회귀', "여러 수치에 가중치를 곱해 더한 뒤 0~1 사이 확률로 바꿔 분류하는 간단한 머신러닝 모델임. 각 특징이 판정에 얼마나 영향을 주었는지 해석하기 쉬움."],
+  ['양자화', '양자화', "모델의 숫자를 더 적은 비트로 줄여 저장하는 기법임. 용량이 약 1/4로 줄고 정확도는 조금 떨어짐."],
+  ['XSum', 'XSum', "BBC 뉴스 기사로 만든 데이터셋임. 논문들이 가짜 뉴스 탐지 상황을 재현할 때 썼음."],
+];
+const SORTED = [...TERMS].sort((a, b) => b[0].length - a[0].length);
+
+// 섹션마다 각 용어의 첫 등장만 점선 밑줄로 감쌈
+function wrapTerms(root) {
+  const used = new Set();
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement.closest('.prose, td') && !node.parentElement.closest('.term, button, h2, h3, code, .formula')) {
+      nodes.push(node);
+    }
+  }
+  for (let node of nodes) {
+    let changed = true;
+    while (changed && node) {
+      changed = false;
+      for (const [word, title, text] of SORTED) {
+        if (used.has(text)) {
+          continue;
+        }
+        const at = node.data.indexOf(word);
+        if (at < 0) {
+          continue;
+        }
+        const span = document.createElement('span');
+        span.className = 'term';
+        span.tabIndex = 0;
+        span.dataset.title = title;
+        span.dataset.tip = text;
+        const hit = node.splitText(at);
+        const rest = hit.splitText(word.length);
+        span.textContent = hit.data;
+        hit.replaceWith(span);
+        used.add(text);
+        node = rest;
+        changed = true;
+        break;
+      }
+    }
+  }
+}
+document.querySelectorAll('.prose-sec').forEach(wrapTerms);
+
+// 툴팁 표시: 마우스 올리기·키보드 포커스·터치 모두 지원
+const tip = $('tip');
+let pinned = null;
+function showTip(el) {
+  tip.innerHTML = `<b>${esc(el.dataset.title)}</b>${esc(el.dataset.tip)}`;
+  tip.classList.add('show');
+  const r = el.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 24);
+  tip.style.maxWidth = w + 'px';
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
+  tip.style.left = left + 'px';
+  const h = tip.offsetHeight;
+  tip.style.top = (r.bottom + h + 12 < window.innerHeight ? r.bottom + 8 : r.top - h - 8) + 'px';
+}
+function hideTip() {
+  tip.classList.remove('show');
+}
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest('.term');
+  if (el) {
+    showTip(el);
+  }
+});
+document.addEventListener('mouseout', (e) => {
+  if (e.target.closest('.term') && !pinned) {
+    hideTip();
+  }
+});
+document.addEventListener('focusin', (e) => {
+  if (e.target.classList?.contains('term')) {
+    showTip(e.target);
+  }
+});
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('.term');
+  pinned = el && pinned !== el ? el : null;
+  if (pinned) {
+    showTip(pinned);
+  } else {
+    hideTip();
+  }
+});
+window.addEventListener('scroll', () => {
+  if (!pinned) {
+    hideTip();
+  }
+}, { passive: true });
+
+// 용어 사전 카드
+const seen = new Set();
+$('gloss').innerHTML = TERMS.filter(([, , text]) => {
+  if (seen.has(text)) {
+    return false;
+  }
+  seen.add(text);
+  return true;
+}).map(([, title, text]) => `<div><b>${esc(title)}</b>${esc(text)}</div>`).join('');
+
+// ═══════════ 장식 · 스크롤 효과 ═══════════
+const FLOAT_WORDS = ['the', ' cat', 'log p', '0.30', ' mat', 'd = 3.4', 'AUROC', 'T5', ' 쉼표', 'top-k', '−2.84', '토큰', 'σ̃', 'μ̃', ' 수 있다'];
+const floaters = $('floaters');
+for (let i = 0; i < 18; i++) {
+  const s = document.createElement('span');
+  s.textContent = FLOAT_WORDS[i % FLOAT_WORDS.length];
+  // 가운데 글자와 겹치지 않게 좌우 가장자리에만 배치
+  s.style.left = (i % 2 ? 2 + Math.random() * 14 : 82 + Math.random() * 12) + '%';
+  s.style.top = (20 + Math.random() * 70) + '%';
+  s.style.animationDuration = (7 + Math.random() * 8) + 's';
+  s.style.animationDelay = (-Math.random() * 12) + 's';
+  floaters.appendChild(s);
+}
+const io = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) {
+      continue;
+    }
+    entry.target.classList.add('in');
+    // 막대그래프는 화면에 들어올 때 차오름
+    entry.target.querySelectorAll('.hbar div[data-w]').forEach((d) => {
+      d.style.width = d.dataset.w + '%';
+    });
+    io.unobserve(entry.target);
+  }
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+const navLinks = [...document.querySelectorAll('#nav a')];
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  $('progress').style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100 + '%';
+  let current = null;
+  for (const a of navLinks) {
+    const sec = document.querySelector(a.getAttribute('href'));
+    if (sec && sec.getBoundingClientRect().top < 120) {
+      current = a;
+    }
+  }
+  navLinks.forEach((a) => a.classList.toggle('on', a === current));
+}, { passive: true });
+
+// ═══════════ 0. 다음 단어 고르기 ═══════════
+// 가상 확률표 (설명용)
+let nwCands = [['mat', .30], ['floor', .18], ['bed', .12], ['couch', .09], ['table', .07], ['roof', .05], ['edge', .04], ['ground', .04], ['grass', .03], ['keyboard', .02]];
+let nwOther = .06;
+let nwPick = -1;
+let nwCounts = new Array(10).fill(0);
+
+// top-k로 잘라 합이 1이 되게 다시 맞춘 확률 (k가 최대면 '기타' 몫까지 포함해 원래 확률 유지)
+function nwActive() {
+  const k = Number($('nwK').value);
+  const top = nwCands.slice(0, k);
+  const total = top.reduce((a, c) => a + c[1], 0) + (k === nwCands.length ? nwOther : 0);
+  return top.map(([w, p]) => [w, p / total]);
+}
+function nwRender() {
+  const k = Number($('nwK').value);
+  $('nwKo').textContent = k;
+  const active = nwActive();
+  const max = Math.max(...active.map((c) => c[1]));
+  const otherShare = nwOther / (nwCands.reduce((a, c) => a + c[1], 0) + nwOther);
+  $('nwBars').innerHTML = nwCands.map(([w], i) => {
+    const on = i < k;
+    const p = on ? active[i][1] : 0;
+    return `<div class="cand${on ? '' : ' cut'}${i === nwPick ? ' pick' : ''}" data-i="${i}">
+      <span class="w">${esc(w)}</span><div class="bg"><div class="fill" style="width:${on ? (p / max) * 100 : 0}%"></div></div>
+      <span class="p">${on ? (p * 100).toFixed(1) + '%' : '제외'}</span></div>`;
+  }).join('') + (k === nwCands.length ? `<div class="cand cut" style="opacity:.5"><span class="w">(기타)</span><div class="bg"></div><span class="p">${(otherShare * 100).toFixed(1)}%</span></div>` : '');
+  nwScore();
+}
+function nwScore() {
+  const active = nwActive();
+  if (nwPick < 0 || nwPick >= active.length) {
+    $('nwBlank').textContent = '?';
+    $('nwLp').textContent = $('nwMean').textContent = $('nwZ').textContent = '–';
+    $('nwZ').style.color = '';
+    return;
+  }
+  // 기대 평균과 표준편차는 남은 후보들의 확률로 가중평균
+  let mean = 0;
+  let second = 0;
+  for (const [, p] of active) {
+    mean += p * Math.log(p);
+    second += p * Math.log(p) ** 2;
+  }
+  const sd = Math.sqrt(Math.max(0, second - mean * mean));
+  const lp = Math.log(active[nwPick][1]);
+  $('nwBlank').textContent = active[nwPick][0];
+  $('nwLp').textContent = fmt(lp);
+  $('nwMean').textContent = fmt(mean);
+  const z = sd > 1e-9 ? (lp - mean) / sd : NaN;
+  $('nwZ').textContent = sd > 1e-9 ? fmt(z) : '후보 1개';
+  $('nwZ').style.color = z > 0.3 ? 'var(--ai)' : z < -0.3 ? 'var(--human)' : 'var(--ink)';
+}
+function nwDraw() {
+  const active = nwActive();
+  let r = Math.random() * active.reduce((a, c) => a + c[1], 0);
+  for (let i = 0; i < active.length; i++) {
+    r -= active[i][1];
+    if (r <= 0) {
+      return i;
+    }
+  }
+  return active.length - 1;
+}
+$('nwBars').addEventListener('click', (e) => {
+  const row = e.target.closest('.cand');
+  if (!row || row.classList.contains('cut') || row.dataset.i === undefined) {
+    return;
+  }
+  nwPick = Number(row.dataset.i);
+  nwRender();
+});
+$('nwK').oninput = () => {
+  nwCounts = new Array(nwCands.length).fill(0);
+  $('nwTally').textContent = '';
+  nwRender();
+};
+// 룰렛처럼 막대를 몇 번 훑은 뒤 확률대로 하나를 고름
+$('nwSample').onclick = async () => {
+  $('nwSample').disabled = true;
+  const final = nwDraw();
+  const k = nwActive().length;
+  for (let s = 0; s < 12; s++) {
+    document.querySelectorAll('#nwBars .cand').forEach((el) => el.classList.toggle('spin', Number(el.dataset.i) === s % k));
+    await new Promise((r) => setTimeout(r, 45 + s * 12));
+  }
+  document.querySelectorAll('#nwBars .cand').forEach((el) => el.classList.remove('spin'));
+  nwPick = final;
+  nwCounts[final]++;
+  nwRender();
+  $('nwSample').disabled = false;
+};
+$('nwSample20').onclick = () => {
+  for (let i = 0; i < 20; i++) {
+    nwCounts[nwDraw()]++;
+  }
+  const total = nwCounts.reduce((a, b) => a + b, 0);
+  const top3 = nwCounts.slice(0, 3).reduce((a, b) => a + b, 0);
+  $('nwTally').textContent = `지금까지 ${total}번 중 상위 3개 단어가 ${top3}번 (${Math.round((top3 / total) * 100)}%)`;
+};
+nwRender();
+
+// ═══════════ 1. 가상 확률 지형 ═══════════
+const land = $('land');
+const terrain = (x) => 150 * Math.exp(-Math.pow((x - 0.28) / 0.09, 2)) + 70 * Math.exp(-Math.pow((x - 0.75) / 0.3, 2)) + 20;
+const px = (x) => 20 + x * 680;
+const py = (x) => 250 - terrain(x);
+let landX = 0.28;
+let landDots = [];
+function drawLand() {
+  land.innerHTML = '';
+  const defs = svgEl(land, 'defs', {});
+  const grad = svgEl(defs, 'linearGradient', { id: 'lg', x1: 0, y1: 0, x2: 0, y2: 1 });
+  svgEl(grad, 'stop', { offset: '0', 'stop-color': '#a06bff', 'stop-opacity': '.45' });
+  svgEl(grad, 'stop', { offset: '1', 'stop-color': '#a06bff', 'stop-opacity': '0' });
+  let path = '';
+  for (let i = 0; i <= 200; i++) {
+    const x = i / 200;
+    path += (i ? 'L' : 'M') + px(x).toFixed(1) + ' ' + py(x).toFixed(1);
+  }
+  svgEl(land, 'path', { d: path + 'L700 270L20 270Z', fill: 'url(#lg)' });
+  svgEl(land, 'path', { d: path, fill: 'none', stroke: '#c9b3ff', 'stroke-width': 2.5 });
+  svgEl(land, 'text', { x: 24, y: 20, 'font-size': 13, fill: '#a3a9c9' }, '↑ log p (모델이 보는 그럴듯함)');
+  svgEl(land, 'text', { x: 696, y: 276, 'font-size': 13, fill: '#a3a9c9', 'text-anchor': 'end' }, '글의 표현 방식 →');
+  for (const dot of landDots) {
+    const drop = terrain(landX) - terrain(dot);
+    svgEl(land, 'line', { x1: px(landX), y1: py(landX), x2: px(dot), y2: py(dot), stroke: drop > 0 ? '#ff7a45' : '#4cc9f0', 'stroke-opacity': .35 });
+    svgEl(land, 'circle', { cx: px(dot), cy: py(dot), r: 5, fill: drop > 0 ? '#ff7a45' : '#4cc9f0' });
+  }
+  svgEl(land, 'circle', { cx: px(landX), cy: py(landX), r: 16, fill: 'transparent', stroke: '#fff', 'stroke-opacity': .25, 'stroke-dasharray': '3 3' });
+  const handle = svgEl(land, 'circle', { cx: px(landX), cy: py(landX), r: 10, fill: '#fff', stroke: '#a06bff', 'stroke-width': 3, style: 'cursor:grab' });
+  handle.id = 'handle';
+  svgEl(land, 'text', { x: px(landX), y: py(landX) - 22, 'font-size': 13, 'font-weight': 700, fill: '#fff', 'text-anchor': 'middle' }, '검사할 글');
+  svgEl(land, 'text', { x: 696, y: 40, 'font-size': 12, fill: '#ff7a45', 'text-anchor': 'end' }, '● 내려감');
+  svgEl(land, 'text', { x: 696, y: 58, 'font-size': 12, fill: '#4cc9f0', 'text-anchor': 'end' }, '● 올라감');
+  // 곡률: 2차 미분의 부호
+  const h = 0.01;
+  const second = (terrain(landX + h) + terrain(landX - h) - 2 * terrain(landX)) / (h * h);
+  const c = $('landC');
+  if (second < -2000) {
+    c.textContent = '음수 · 봉우리';
+    c.style.color = 'var(--ai)';
+  } else if (second > 2000) {
+    c.textContent = '양수 · 골짜기';
+    c.style.color = 'var(--human)';
+  } else {
+    c.textContent = '0 근처 · 비탈';
+    c.style.color = 'var(--ink)';
+  }
+}
+function shake() {
+  const step = Number($('stepSz').value) / 100;
+  landDots = [];
+  let sum = 0;
+  for (let i = 0; i < 16; i++) {
+    const s = step * (0.3 + Math.random() * 0.7) * (i % 2 ? 1 : -1);
+    const x = Math.min(0.99, Math.max(0.01, landX + s));
+    landDots.push(x);
+    sum += terrain(landX) - terrain(x);
+  }
+  const d = sum / 16;
+  $('landD').textContent = fmt(d, 1);
+  $('landD').style.color = d > 8 ? 'var(--ai)' : 'var(--ink)';
+  drawLand();
+}
+$('shake').onclick = shake;
+$('stepSz').oninput = () => {
+  $('stepO').textContent = $('stepSz').value;
+  if (landDots.length) {
+    shake();
+  }
+};
+$('toPeak').onclick = () => {
+  landX = 0.28;
+  shake();
+};
+$('toSlope').onclick = () => {
+  landX = 0.56;
+  shake();
+};
+// 점 끌기 (마우스·터치 공통)
+let dragging = false;
+land.addEventListener('pointerdown', (e) => {
+  if (e.target.id === 'handle') {
+    dragging = true;
+    land.setPointerCapture(e.pointerId);
+  }
+});
+land.addEventListener('pointermove', (e) => {
+  if (!dragging) {
+    return;
+  }
+  const r = land.getBoundingClientRect();
+  const sx = ((e.clientX - r.left) / r.width) * 720;
+  landX = Math.min(0.97, Math.max(0.03, (sx - 20) / 680));
+  landDots = [];
+  $('landD').textContent = '–';
+  drawLand();
+});
+land.addEventListener('pointerup', () => {
+  if (dragging) {
+    dragging = false;
+    shake();
+  }
+});
+drawLand();
+
+// ═══════════ 2. 속도 경주 ═══════════
+$('raceGo').onclick = () => {
+  $('raceGo').disabled = true;
+  const total = 6000;
+  const fastEnd = Math.max(60, total * 233 / 79113);
+  const start = performance.now();
+  function frame(now) {
+    const t = now - start;
+    const pd = Math.min(1, t / total);
+    const pf = Math.min(1, t / fastEnd);
+    $('rD').style.width = pd * 100 + '%';
+    $('rF').style.width = pf * 100 + '%';
+    $('rDc').textContent = `호출 ${Math.round(pd * 101)}번`;
+    $('rFc').textContent = pf >= 1 ? '호출 1번 ✓' : '호출 0번';
+    if (pd < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      $('rDc').textContent = '호출 101번 ✓';
+      $('raceGo').disabled = false;
+    }
+  }
+  requestAnimationFrame(frame);
+};
+
+// ═══════════ ROC · 판정선 ═══════════
+// 표준정규분포 누적확률 (erf 근사)
+function phi(x) {
+  const z = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * z);
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z);
+  return x >= 0 ? (1 + erf) / 2 : (1 - erf) / 2;
+}
+const pdf = (x, m) => Math.exp(-((x - m) ** 2) / 2) / Math.sqrt(2 * Math.PI);
+function drawRoc() {
+  const thr = Number($('thr').value);
+  const gap = Number($('gap').value);
+  $('thrO').textContent = thr.toFixed(1);
+  $('gapO').textContent = gap.toFixed(1);
+  const sx = (v) => 20 + ((v + 3) / 11) * 480;
+  const sy = (p) => 210 - p * 420;
+  const dist = $('dist');
+  dist.innerHTML = '';
+  // 판정선 오른쪽 넓이를 칠함
+  for (const [m, color] of [[0, '#4cc9f0'], [gap, '#ff7a45']]) {
+    let area = `M${sx(thr)} 210`;
+    for (let v = thr; v <= 8; v += 0.05) {
+      area += `L${sx(v).toFixed(1)} ${sy(pdf(v, m)).toFixed(1)}`;
+    }
+    svgEl(dist, 'path', { d: area + `L${sx(8)} 210Z`, fill: color, 'fill-opacity': .28 });
+    let line = '';
+    for (let v = -3; v <= 8; v += 0.05) {
+      line += (line ? 'L' : 'M') + sx(v).toFixed(1) + ' ' + sy(pdf(v, m)).toFixed(1);
+    }
+    svgEl(dist, 'path', { d: line, fill: 'none', stroke: color, 'stroke-width': 2.5 });
+  }
+  svgEl(dist, 'line', { x1: 20, y1: 210, x2: 500, y2: 210, stroke: '#6e7499' });
+  svgEl(dist, 'line', { x1: sx(thr), y1: 20, x2: sx(thr), y2: 214, stroke: '#ffd166', 'stroke-width': 2.5, 'stroke-dasharray': '5 4' });
+  svgEl(dist, 'text', { x: sx(thr), y: 14, 'font-size': 12, fill: '#ffd166', 'text-anchor': 'middle' }, '판정선 → 오른쪽은 AI로 판정');
+  svgEl(dist, 'text', { x: sx(0), y: 232, 'font-size': 12.5, fill: '#4cc9f0', 'text-anchor': 'middle' }, '사람 글');
+  svgEl(dist, 'text', { x: sx(gap), y: 232, 'font-size': 12.5, fill: '#ff7a45', 'text-anchor': 'middle' }, 'AI 글');
+  const tpr = 1 - phi(thr - gap);
+  const fpr = 1 - phi(thr);
+  const auc = phi(gap / Math.SQRT2);
+  $('tpr').textContent = (tpr * 100).toFixed(1) + '%';
+  $('fpr').textContent = (fpr * 100).toFixed(1) + '%';
+  $('auc').textContent = auc.toFixed(3);
+  // ROC 곡선
+  const roc = $('rocSvg');
+  roc.innerHTML = '';
+  const rx = (v) => 30 + v * 190;
+  const ry = (v) => 210 - v * 190;
+  svgEl(roc, 'rect', { x: 30, y: 20, width: 190, height: 190, fill: 'none', stroke: '#6e7499' });
+  svgEl(roc, 'line', { x1: rx(0), y1: ry(0), x2: rx(1), y2: ry(1), stroke: '#6e7499', 'stroke-dasharray': '4 4' });
+  let curve = '';
+  let fill = `M${rx(0)} ${ry(0)}`;
+  for (let t = 8; t >= -4; t -= 0.1) {
+    const a = rx(1 - phi(t));
+    const b = ry(1 - phi(t - gap));
+    curve += (curve ? 'L' : 'M') + a.toFixed(1) + ' ' + b.toFixed(1);
+    fill += `L${a.toFixed(1)} ${b.toFixed(1)}`;
+  }
+  svgEl(roc, 'path', { d: fill + `L${rx(1)} ${ry(0)}Z`, fill: '#ffd166', 'fill-opacity': .15 });
+  svgEl(roc, 'path', { d: curve, fill: 'none', stroke: '#ffd166', 'stroke-width': 2.5 });
+  svgEl(roc, 'circle', { cx: rx(fpr), cy: ry(tpr), r: 6, fill: '#fff', stroke: '#a06bff', 'stroke-width': 3 });
+  svgEl(roc, 'text', { x: 125, y: 234, 'font-size': 11, fill: '#a3a9c9', 'text-anchor': 'middle' }, '오탐률 →');
+  svgEl(roc, 'text', { x: 14, y: 115, 'font-size': 11, fill: '#a3a9c9', 'text-anchor': 'middle', transform: 'rotate(-90 14 115)' }, '탐지율 →');
+  svgEl(roc, 'text', { x: 125, y: 140, 'font-size': 13, fill: '#ffd166', 'text-anchor': 'middle' }, 'AUROC = 넓이');
+}
+$('thr').oninput = drawRoc;
+$('gap').oninput = drawRoc;
+drawRoc();
+
+// ═══════════ 영어 실험실: 실제 GPT-2 / T5 ═══════════
+const HUMAN_SAMPLE = 'When I was a boy, there was but one permanent ambition among my comrades in our village on the west bank of the Mississippi River. That was, to be a steamboatman. We had transient ambitions of other sorts, but they were only transient. When a circus came and went, it left us all burning to become clowns; the first negro minstrel show that came to our section left us all suffering to try that kind of life; now and then we had a hope that if we lived and were good, God would permit us to be pirates.';
+const PROMPTS = ['The city council announced on Monday that', 'Scientists at the university have discovered a new', 'In a statement released yesterday, the company said'];
+const MAX_TOKENS = 200;      // 브라우저 속도를 위해 앞 200토큰만 채점
+let gptTok, gpt, t5Tok, t5;
+let textLabel = '직접 입력';  // 기록표에 남길 글 종류
+
+$('humanBtn').onclick = () => {
+  $('txt').value = HUMAN_SAMPLE;
+  textLabel = '사람 (고전)';
+};
+$('txt').addEventListener('input', () => {
+  textLabel = '직접 입력';
+});
+
+$('load').onclick = async () => {
+  $('load').disabled = true;
+  $('loadBar').hidden = false;
+  try {
+    $('loadMsg').textContent = '라이브러리 불러오는 중…';
+    const tf = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+    tf.env.allowLocalModels = false;
+    // 파일별 내려받기 진행률을 합쳐서 표시
+    const files = {};
+    const onProgress = (info) => {
+      if (info.status !== 'progress') {
+        return;
+      }
+      files[info.name + '/' + info.file] = info;
+      let loaded = 0;
+      let total = 0;
+      for (const key in files) {
+        loaded += files[key].loaded;
+        total += files[key].total;
+      }
+      $('loadBar').value = total ? (loaded / total) * 100 : 0;
+      $('loadMsg').textContent = `내려받는 중… ${(loaded / 1e6).toFixed(0)}MB`;
+    };
+    gptTok = await tf.AutoTokenizer.from_pretrained('Xenova/gpt2');
+    gpt = await tf.AutoModelForCausalLM.from_pretrained('Xenova/gpt2', { quantized: true, progress_callback: onProgress });
+    t5Tok = await tf.AutoTokenizer.from_pretrained('Xenova/t5-small');
+    t5 = await tf.AutoModelForSeq2SeqLM.from_pretrained('Xenova/t5-small', { quantized: true, progress_callback: onProgress });
+    $('loadMsg').textContent = '✅ 준비 완료: GPT-2(채점) + T5-small(섭동)';
+    $('loadBar').hidden = true;
+    for (const id of ['gen', 'runFast', 'runDet', 'nwReal']) {
+      $(id).disabled = false;
+    }
+  } catch (err) {
+    console.error(err);
+    $('loadMsg').textContent = '모델을 불러오지 못함: ' + err.message;
+    $('load').disabled = false;
+  }
+};
+
+// generate() 결과(배열 또는 텐서)에서 첫 번째 토큰 id 배열을 꺼냄
+function firstIds(out) {
+  const rows = typeof out.tolist === 'function' ? out.tolist() : out;
+  return Array.from(rows[0], Number);
+}
+
+// 한 줄의 로짓에서 log-softmax 정규화 상수를 구함
+function logNorm(logits, base, vocab) {
+  let max = -Infinity;
+  for (let v = 0; v < vocab; v++) {
+    if (logits[base + v] > max) {
+      max = logits[base + v];
+    }
+  }
+  let sumExp = 0;
+  for (let v = 0; v < vocab; v++) {
+    sumExp += Math.exp(logits[base + v] - max);
+  }
+  return max + Math.log(sumExp);
+}
+
+// GPT-2를 한 번 호출해 토큰별 통계를 구함. detail=false면 평균 log p만 계산
+async function scoreText(text, detail) {
+  const enc = await gptTok(text, { truncation: true, max_length: MAX_TOKENS });
+  const ids = Array.from(enc.input_ids.data, Number);
+  const out = await gpt(enc);
+  const logits = out.logits.data;
+  const vocab = out.logits.dims[2];
+  const rows = [];
+  let sumLL = 0;
+  // j번째 줄의 로짓은 (j+1)번째 토큰에 대한 예측
+  for (let j = 0; j < ids.length - 1; j++) {
+    const base = j * vocab;
+    const logZ = logNorm(logits, base, vocab);
+    const target = logits[base + ids[j + 1]];
+    const ll = target - logZ;
+    sumLL += ll;
+    if (!detail) {
+      continue;
+    }
+    // 어휘 전체를 훑어 기대값·분산·순위·1순위 단어를 정확히 구함 (Fast-DetectGPT 해석해)
+    let mean = 0;
+    let second = 0;
+    let rank = 1;
+    let best = 0;
+    for (let v = 0; v < vocab; v++) {
+      const lp = logits[base + v] - logZ;
+      const p = Math.exp(lp);
+      mean += p * lp;
+      second += p * lp * lp;
+      if (logits[base + v] > target) {
+        rank++;
+      }
+      if (logits[base + v] > logits[base + best]) {
+        best = v;
+      }
+    }
+    rows.push({ token: gptTok.decode([ids[j + 1]]), ll: ll, mean: mean, variance: second - mean * mean, rank: rank, top: gptTok.decode([best]) });
+  }
+  const count = ids.length - 1;
+  return { meanLL: sumLL / count, count: count, rows: rows, first: gptTok.decode([ids[0]]) };
+}
+
+// ── 0번 위젯을 실제 GPT-2 확률로 바꿈 ──
+$('nwReal').onclick = async () => {
+  const prefix = $('nwInput').value.trim();
+  if (!prefix) {
+    return;
+  }
+  $('nwReal').disabled = true;
+  try {
+    const enc = await gptTok(prefix);
+    const out = await gpt(enc);
+    const vocab = out.logits.dims[2];
+    const base = (out.logits.dims[1] - 1) * vocab;
+    const logits = out.logits.data;
+    const logZ = logNorm(logits, base, vocab);
+    // 상위 10개 후보 찾기
+    const top = [];
+    for (let v = 0; v < vocab; v++) {
+      const lp = logits[base + v] - logZ;
+      if (top.length < 10 || lp > top[top.length - 1][1]) {
+        top.push([v, lp]);
+        top.sort((a, b) => b[1] - a[1]);
+        if (top.length > 10) {
+          top.pop();
+        }
+      }
+    }
+    nwCands = top.map(([v, lp]) => [gptTok.decode([v]).replace(/\n/g, '↵'), Math.exp(lp)]);
+    nwOther = Math.max(0, 1 - nwCands.reduce((a, c) => a + c[1], 0));
+    nwPick = -1;
+    nwCounts = new Array(10).fill(0);
+    $('nwTally').textContent = '';
+    $('nwPrefix').textContent = prefix;
+    $('nwBadge').textContent = '실제 GPT-2';
+    $('nwBadge').className = 'badge real';
+    nwRender();
+  } catch (err) {
+    console.error(err);
+  }
+  $('nwReal').disabled = false;
+};
+
+// ── GPT-2로 글 생성 ──
+$('gen').onclick = async () => {
+  $('gen').disabled = true;
+  $('genMsg').textContent = 'GPT-2가 글 쓰는 중…';
+  await tick();
+  try {
+    const prompt = PROMPTS[Math.floor(Math.random() * PROMPTS.length)];
+    const enc = await gptTok(prompt);
+    const out = await gpt.generate(enc.input_ids, { max_new_tokens: 90, do_sample: true, top_k: 40 });
+    $('txt').value = gptTok.decode(firstIds(out), { skip_special_tokens: true }).trim();
+    textLabel = 'AI (GPT-2)';
+    $('genMsg').textContent = `완료 · top-k 40 샘플링 · 시작 문구 "${prompt}"`;
+  } catch (err) {
+    console.error(err);
+    $('genMsg').textContent = '생성 실패: ' + err.message;
+  }
+  $('gen').disabled = false;
+};
+
+// ── 결과 기록 ──
+const runs = [];
+function record(kind, value) {
+  const text = $('txt').value.trim();
+  let row = runs.find((h) => h.text === text);
+  if (!row) {
+    row = { text: text, label: textLabel, fast: null, det: null };
+    runs.push(row);
+  }
+  row[kind] = value;
+  $('histTbl').innerHTML = '<tr><th>#</th><th>글 종류</th><th>글 앞부분</th><th>Fast d</th><th>DetectGPT d/σ</th></tr>' +
+    runs.map((h, i) => `<tr><td>${i + 1}</td><td>${esc(h.label)}</td><td class="tiny">${esc(h.text.slice(0, 48))}…</td><td class="num">${fmt(h.fast ?? NaN)}</td><td class="num">${fmt(h.det ?? NaN)}</td></tr>`).join('');
+  // Fast d 띠 그림: 글 종류별 한 줄
+  const plot = $('histPlot');
+  plot.innerHTML = '';
+  const lanes = [['AI (GPT-2)', '#ff7a45', 30], ['사람 (고전)', '#4cc9f0', 72], ['직접 입력', '#ffd166', 114]];
+  const sx = (v) => 130 + ((Math.max(-3, Math.min(8, v)) + 3) / 11) * 570;
+  for (const [name, color, y] of lanes) {
+    svgEl(plot, 'text', { x: 0, y: y + 5, 'font-size': 13, fill: color }, name);
+    svgEl(plot, 'line', { x1: 130, y1: y, x2: 700, y2: y, stroke: '#6e7499', 'stroke-opacity': .4 });
+    for (const h of runs) {
+      if (h.label === name && h.fast !== null) {
+        svgEl(plot, 'circle', { cx: sx(h.fast), cy: y, r: 7, fill: color, 'fill-opacity': .8 });
+      }
+    }
+  }
+  for (const v of [0, 3]) {
+    svgEl(plot, 'line', { x1: sx(v), y1: 14, x2: sx(v), y2: 130, stroke: '#a3a9c9', 'stroke-dasharray': '3 4' });
+    svgEl(plot, 'text', { x: sx(v), y: 146, 'font-size': 11.5, fill: '#a3a9c9', 'text-anchor': 'middle' }, 'd = ' + v);
+  }
+}
+
+// ── Fast-DetectGPT ──
+$('runFast').onclick = async () => {
+  const text = $('txt').value.trim();
+  if (!text) {
+    $('fastMsg').textContent = '먼저 글을 넣기';
+    return;
+  }
+  $('runFast').disabled = true;
+  $('fastMsg').textContent = '계산 중…';
+  await tick();
+  try {
+    const started = performance.now();
+    const res = await scoreText(text, true);
+    let sumLL = 0;
+    let sumMean = 0;
+    let sumVar = 0;
+    let sumLogRank = 0;
+    for (const row of res.rows) {
+      sumLL += row.ll;
+      sumMean += row.mean;
+      sumVar += row.variance;
+      sumLogRank += Math.log(row.rank);
+    }
+    // 조건부 확률 곡률: (원문 log p − 기대 log p) ÷ 표준편차
+    const d = (sumLL - sumMean) / Math.sqrt(sumVar);
+    $('fD').textContent = fmt(d);
+    $('fD').style.color = d > 2.5 ? 'var(--ai)' : d < 1 ? 'var(--human)' : 'var(--gold)';
+    $('fLL').textContent = fmt(sumLL / res.count);
+    $('fEnt').textContent = fmt(-sumMean / res.count);
+    $('fRank').textContent = fmt(sumLogRank / res.count);
+    placeMarks($('fBar'), -3, 8, [
+      { value: 0, color: '#4cc9f0', label: '사람 글 부근 (0)' },
+      { value: 3, color: '#ff7a45', label: 'AI 글 부근 (3)' },
+      { value: d, color: '#ffffff', label: '이 글 ' + fmt(d) },
+    ]);
+    // 토큰별 z점수로 색칠
+    const box = $('fTok');
+    box.innerHTML = '';
+    const firstSpan = document.createElement('span');
+    firstSpan.textContent = res.first;
+    firstSpan.title = '첫 토큰은 앞 문맥이 없어 채점하지 않음';
+    box.appendChild(firstSpan);
+    for (const row of res.rows) {
+      const z = (row.ll - row.mean) / Math.sqrt(row.variance);
+      const strength = Math.min(1, Math.abs(z) / 2.5) * 0.6;
+      const span = document.createElement('span');
+      span.textContent = row.token;
+      span.style.background = z >= 0 ? `rgba(255,122,69,${strength})` : `rgba(76,201,240,${strength})`;
+      span.title = `log p = ${fmt(row.ll)} · 기대값 = ${fmt(row.mean)} · 순위 ${row.rank}위 · GPT-2의 1순위: "${row.top}"`;
+      box.appendChild(span);
+    }
+    $('fastOut').hidden = false;
+    $('fastMsg').textContent = `완료 · ${res.count}개 토큰 · ${((performance.now() - started) / 1000).toFixed(1)}초 · 모델 호출 1번`;
+    record('fast', d);
+  } catch (err) {
+    console.error(err);
+    $('fastMsg').textContent = '실패: ' + err.message;
+  }
+  $('runFast').disabled = false;
+};
+
+// ── DetectGPT ──
+// 2단어 구간을 무작위로 골라 전체 단어의 약 15%를 가림 (구간끼리 붙지 않게 한 칸씩 띄움)
+function pickSpans(wordCount) {
+  const want = Math.max(1, Math.ceil((wordCount * 0.15) / 2));
+  const taken = new Array(wordCount).fill(false);
+  const starts = [];
+  for (let attempt = 0; attempt < 400 && starts.length < want; attempt++) {
+    const start = Math.floor(Math.random() * (wordCount - 1));
+    let free = true;
+    for (let i = Math.max(0, start - 1); i <= Math.min(wordCount - 1, start + 2); i++) {
+      if (taken[i]) {
+        free = false;
+      }
+    }
+    if (free) {
+      taken[start] = true;
+      taken[start + 1] = true;
+      starts.push(start);
+    }
+  }
+  return starts.sort((a, b) => a - b);
+}
+
+// T5로 가린 자리를 채워 변형 글 하나를 만듦
+async function perturb(words) {
+  const starts = pickSpans(words.length);
+  const pieces = [];      // 문자열 조각 또는 {span: 번호}
+  let cursor = 0;
+  starts.forEach((start, index) => {
+    pieces.push(words.slice(cursor, start).join(' '));
+    pieces.push({ span: index });
+    cursor = start + 2;
+  });
+  pieces.push(words.slice(cursor).join(' '));
+  const masked = pieces.map((piece) => (typeof piece === 'string' ? piece : `<extra_id_${piece.span}>`)).join(' ');
+  const enc = await t5Tok(masked);
+  const out = await t5.generate(enc.input_ids, { max_new_tokens: starts.length * 7 + 8, do_sample: true, top_k: 50 });
+  const raw = t5Tok.decode(firstIds(out), { skip_special_tokens: false }).replace(/<pad>|<\/s>/g, '');
+  // "<extra_id_0> 채움0 <extra_id_1> 채움1 …" 형태를 구간별 채움으로 나눔
+  const fills = raw.split(/<extra_id_\d+>/).slice(1).map((fill) => fill.trim());
+  let text = '';
+  let html = '';
+  for (const piece of pieces) {
+    if (typeof piece === 'string') {
+      text += piece + ' ';
+      html += esc(piece) + ' ';
+    } else {
+      // T5가 채우지 못한 구간은 원래 단어를 그대로 둠
+      const original = words.slice(starts[piece.span], starts[piece.span] + 2).join(' ');
+      const fill = fills[piece.span] || original;
+      text += fill + ' ';
+      html += `<mark title="원래: ${esc(original)}">${esc(fill)}</mark> `;
+    }
+  }
+  return { text: text.replace(/\s+/g, ' ').trim(), html: html };
+}
+
+$('runDet').onclick = async () => {
+  const text = $('txt').value.trim();
+  const words = text.split(/\s+/).filter(Boolean).slice(0, 140);   // T5가 감당할 수 있게 140단어까지만
+  if (words.length < 20) {
+    $('detMsg').textContent = '20단어 이상 필요';
+    return;
+  }
+  const k = Number($('k').value);
+  $('runDet').disabled = true;
+  $('detBar').hidden = false;
+  $('detBar').value = 0;
+  try {
+    const started = performance.now();
+    const original = await scoreText(words.join(' '), false);
+    const scores = [];
+    const shown = [];
+    for (let i = 0; i < k; i++) {
+      $('detMsg').textContent = `변형 글 ${i + 1}/${k} 생성·채점 중…`;
+      await tick();
+      const variant = await perturb(words);
+      const scored = await scoreText(variant.text, false);
+      scores.push(scored.meanLL);
+      if (i < 3) {
+        shown.push(variant.html);
+      }
+      $('detBar').value = ((i + 1) / k) * 100;
+    }
+    const mean = scores.reduce((a, b) => a + b, 0) / k;
+    const variance = scores.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (k - 1);
+    const std = Math.sqrt(variance);
+    const seconds = (performance.now() - started) / 1000;
+    const dn = (original.meanLL - mean) / std;
+    $('dD').textContent = fmt(dn);
+    $('dO').textContent = fmt(original.meanLL, 3);
+    $('dM').textContent = fmt(mean, 3);
+    $('dT').textContent = `${seconds.toFixed(0)}초 · ${2 * k + 1}번`;
+    // 점 그림: 변형 글(점), 변형 평균(점선), 원문(붉은 선)
+    const plot = $('detPlot');
+    plot.innerHTML = '';
+    const low = Math.min(original.meanLL, ...scores);
+    const high = Math.max(original.meanLL, ...scores);
+    const pad = (high - low) * 0.1 || 0.1;
+    const sx = (v) => 30 + ((v - low + pad) / (high - low + 2 * pad)) * 660;
+    svgEl(plot, 'line', { x1: 30, y1: 80, x2: 690, y2: 80, stroke: '#6e7499' });
+    scores.forEach((score, index) => {
+      svgEl(plot, 'circle', { cx: sx(score), cy: 80 - (index % 4) * 9 - 6, r: 5, fill: '#a06bff', opacity: 0.75 });
+    });
+    svgEl(plot, 'line', { x1: sx(mean), y1: 30, x2: sx(mean), y2: 86, stroke: '#a06bff', 'stroke-dasharray': '4 3' });
+    svgEl(plot, 'text', { x: sx(mean), y: 104, 'font-size': 12, fill: '#c9b3ff', 'text-anchor': 'middle' }, '변형 평균');
+    svgEl(plot, 'line', { x1: sx(original.meanLL), y1: 22, x2: sx(original.meanLL), y2: 86, stroke: '#ff7a45', 'stroke-width': 3 });
+    svgEl(plot, 'text', { x: sx(original.meanLL), y: 16, 'font-size': 12, 'font-weight': 700, fill: '#ff7a45', 'text-anchor': 'middle' }, '원문');
+    $('detPerts').innerHTML = shown.map((html) => `<div class="pert">${html}</div>`).join('');
+    $('detOut').hidden = false;
+    $('detMsg').textContent = '완료';
+    record('det', dn);
+  } catch (err) {
+    console.error(err);
+    $('detMsg').textContent = '실패: ' + err.message;
+  }
+  $('detBar').hidden = true;
+  $('runDet').disabled = false;
+};
+
+// ═══════════ 3. KatFishNet 논문 수치 ═══════════
+const COMMA = {
+  essay: { human: [26.31, 1.13, 0.09, 4.35, 24.38], llm: [61.03, 2.56, 0.18, 8.56, 59.39] },
+  poetry: { human: [27.01, 2.61, 0.14, 1.96, 23.13], llm: [42.90, 4.84, 0.28, 2.13, 23.86] },
+  abstract: { human: [47.48, 1.73, 0.20, 9.07, 42.85], llm: [65.21, 2.40, 0.25, 11.55, 61.95] },
+};
+const COMMA_ROWS = ['쉼표 포함 문장 비율 (%)', '쉼표 사용률 (%)', '쉼표 평균 상대 위치', '쉼표 구간 평균 길이 (형태소)', '쉼표 앞뒤 품사 다양성'];
+const METHODS = ['Log-Likelihood', 'Entropy', 'Log-Rank', 'LRR', 'DetectGPT', 'NPR', 'LLM 바꿔 쓰기', 'LLM에게 묻기', 'RoBERTa 미세조정', 'KatFishNet 띄어쓰기', 'KatFishNet 품사 조합', 'KatFishNet 쉼표'];
+const AUC = {
+  essay: [57.97, 53.30, 53.80, 59.59, 45.80, 39.94, 81.27, 50.07, 65.93, 79.51, 82.99, 94.88],
+  poetry: [61.46, 48.95, 60.65, 43.35, 66.02, 55.96, 63.87, 50.03, 61.97, 60.40, 57.30, 73.10],
+  abstract: [49.59, 53.54, 49.90, 50.67, 52.87, 56.96, 57.33, 47.39, 50.15, 58.00, 53.33, 75.62],
+};
+function showGenre(g) {
+  document.querySelectorAll('#genreTabs button').forEach((b) => b.classList.toggle('on', b.dataset.g === g));
+  $('commaTbl').innerHTML = '<tr><th>지표</th><th style="color:var(--human)">사람</th><th style="color:var(--ai)">LLM</th></tr>' +
+    COMMA_ROWS.map((name, i) => `<tr><td>${name}</td><td class="num">${COMMA[g].human[i].toFixed(2)}</td><td class="num">${COMMA[g].llm[i].toFixed(2)}</td></tr>`).join('');
+  const best = Math.max(...AUC[g]);
+  $('kBars').innerHTML = METHODS.map((name, i) =>
+    `<div class="hbar${name.startsWith('KatFish') ? ' ours' : ''}"><span>${name}${AUC[g][i] === best ? ' 🏆' : ''}</span><div></div><span class="num">${AUC[g][i].toFixed(1)}</span></div>`).join('');
+  // 다음 프레임에 너비를 줘서 막대가 차오르게 함
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    $('kBars').querySelectorAll('.hbar div').forEach((d, i) => {
+      d.style.width = AUC[g][i] + '%';
+    });
+  }));
+}
+$('genreTabs').onclick = (e) => {
+  if (e.target.dataset.g) {
+    showGenre(e.target.dataset.g);
+  }
+};
+showGenre('essay');
+
+// ═══════════ 한국어 실험실 ═══════════
+$('kS1').onclick = () => {
+  $('ktxt').value = '저는 학교에서 스마트폰을 쓰는것에 찬성합니다. 왜냐하면 모르는걸 바로 찾아볼수 있기 때문입니다. 수업시간에 선생님이 말씀하신 내용이 이해가 안될때가 있는데 그럴때 검색하면 금방 알수있습니다. 물론 게임을 하는 친구들도 있을것 같습니다. 그래도 규칙을 정하면 괜찮다고 생각합니다. 친구들이랑 같이 자료를 찾고있으면 공부가 더 재밌어집니다. 그래서 저는 스마트폰 사용을 막지않았으면 좋겠습니다.';
+  $('krun').click();
+};
+$('kS2').onclick = () => {
+  $('ktxt').value = '학교에서의 스마트폰 사용은, 올바르게 활용된다면 학습에 큰 도움이 될 수 있습니다. 첫째, 학생들은 수업 중 궁금한 내용을 즉시 검색할 수 있으며, 이를 통해 자기 주도적 학습 능력을 기를 수 있습니다. 둘째, 다양한 교육용 앱을 활용하면, 복잡한 개념도 쉽게 이해할 수 있을 것입니다. 물론, 스마트폰이 집중력을 떨어뜨릴 수 있다는 우려도 존재합니다. 그러나 명확한 규칙을 마련하고, 교사가 적절히 지도한다면 이러한 문제는 충분히 해결할 수 있습니다. 따라서 스마트폰 사용을 무조건 금지하기보다는, 책임감 있게 사용하는 방법을 가르치는 것이 바람직합니다.';
+  $('krun').click();
+};
+
+// 한글 음절의 받침 번호 (0이면 받침 없음, 4=ㄴ, 8=ㄹ)
+const jong = (ch) => (ch.charCodeAt(0) - 0xac00) % 28;
+
+$('krun').onclick = () => {
+  const text = $('ktxt').value.trim();
+  const sentences = text.split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (!sentences.length) {
+    return;
+  }
+  // 쉼표 지표
+  let withComma = 0;
+  let segments = 0;
+  let segmentWords = 0;
+  for (const sentence of sentences) {
+    if (!sentence.includes(',')) {
+      continue;
+    }
+    withComma++;
+    for (const part of sentence.split(',')) {
+      const count = part.trim().split(/\s+/).filter(Boolean).length;
+      if (count) {
+        segments++;
+        segmentWords += count;
+      }
+    }
+  }
+  const inclusion = (withComma / sentences.length) * 100;
+  // 띄어쓰기 지표: 띄어야 하는 자리를 찾아 실제로 띄었는지 셈, 표시할 위치도 함께 모음
+  const marks = [];
+  let spaced = 0;
+  let joined = 0;
+  const spot = (hasSpace, start, length) => {
+    if (hasSpace) {
+      spaced++;
+    } else {
+      joined++;
+    }
+    marks.push({ start: start, end: start + length, cls: hasSpace ? 'sp' : 'jn' });
+  };
+  // 관형형(받침 ㄴ·ㄹ 또는 '는') 뒤의 의존 명사: 할 수 있다 / 한 것 / 할 줄 알다
+  for (const m of text.matchAll(/([가-힣])( ?)(수(?= ?[있없])|것(?=[이을은도에 ]| ?같)|줄(?= ?[알모]))/g)) {
+    const tail = jong(m[1]);
+    if (tail === 4 || tail === 8 || m[1] === '는') {
+      spot(m[2] === ' ', m.index + 1 + m[2].length, 1);
+    }
+  }
+  for (const m of text.matchAll(/[가-힣]( ?)때문/g)) {
+    spot(m[1] === ' ', m.index + 1 + m[1].length, 2);
+  }
+  // 보조 용언: ~고 있다 / ~지 않다 / ~고 싶다
+  for (const m of text.matchAll(/[가-힣](?:고( ?)(?:있|싶)|지( ?)않)(?=[가-힣])/g)) {
+    spot((m[1] ?? m[2]) === ' ', m.index + m[0].length - 1, 1);
+  }
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === ',') {
+      marks.push({ start: i, end: i + 1, cls: 'cm' });
+    }
+  }
+  // 표시 위치를 앞에서부터 이어 붙여 색칠한 글을 만듦
+  marks.sort((a, b) => a.start - b.start);
+  let html = '';
+  let cursor = 0;
+  for (const mk of marks) {
+    if (mk.start < cursor) {
+      continue;
+    }
+    html += esc(text.slice(cursor, mk.start)) + `<span class="${mk.cls}">${esc(text.slice(mk.start, mk.end))}</span>`;
+    cursor = mk.end;
+  }
+  html += esc(text.slice(cursor));
+  $('kMarked').innerHTML = html;
+  const spots = spaced + joined;
+  $('kSent').textContent = sentences.length;
+  $('kInc').textContent = fmt(inclusion, 1) + '%';
+  $('kSeg').textContent = segments ? fmt(segmentWords / segments, 1) : '–';
+  $('kSp').textContent = spots ? fmt((spaced / spots) * 100, 0) + '%' : '–';
+  placeMarks($('kBar'), 0, 100, [
+    { value: 26.31, color: '#4cc9f0', label: '사람 평균 26.3%' },
+    { value: 61.03, color: '#ff7a45', label: 'LLM 평균 61.0%' },
+    { value: inclusion, color: '#ffffff', label: '이 글' },
+  ]);
+  $('kDetail').textContent = `쉼표가 든 문장 ${withComma}개 / 전체 ${sentences.length}개 · 띄어쓰기 확인 자리 ${spots}곳 중 띄어 쓴 곳 ${spaced}곳, 붙여 쓴 곳 ${joined}곳` +
+    (sentences.length < 5 ? ' · 문장이 5개 미만이라 비율이 크게 흔들릴 수 있음' : '');
+  $('kOut').hidden = false;
+};
+
+// ═══════════ 퀴즈 ═══════════
+const QUIZ = [
+  { q: "DetectGPT가 글을 바꿔 써 보는 이유는 무엇일까요?", opts: ["글의 맞춤법을 고치려고", "원문이 확률 지형의 봉우리에 있는지 확인하려고", "글을 더 길게 만들려고"], answer: 1, exp: "봉우리에 있는 글은 어느 방향으로 바꿔 써도 확률이 떨어짐. 그 하락폭이 d임." },
+  { q: "Fast-DetectGPT가 340배 빨라진 핵심 이유는 무엇일까요?", opts: ["더 작은 모델을 써서", "앞 문맥을 고정해서 모델을 한 번만 호출해도 모든 후보를 계산할 수 있어서", "글을 짧게 잘라서"], answer: 1, exp: "문맥이 원문 그대로라서 한 번 계산한 확률표를 모든 자리, 모든 후보에 다시 쓸 수 있음." },
+  { q: "KatFishNet에서 탐지 성능이 가장 높았던 특징은 무엇일까요?", opts: ["띄어쓰기", "품사 조합", "쉼표"], answer: 2, exp: "쉼표 특징만 쓴 모델이 3개 장르 모두에서 1위였음(논설문 평균 AUROC 94.88%)." },
+  { q: "판정선을 낮추면 어떤 일이 생길까요?", opts: ["AI 글을 더 많이 잡지만 사람 글을 AI로 잘못 판정하는 경우도 늘어남", "모든 글을 정확히 판정함", "AUROC가 올라감"], answer: 0, exp: "판정선을 바꾸면 탐지율과 오탐률이 함께 달라짐. AUROC는 판정선 전체를 훑어 구하므로 판정선 하나를 옮겨도 바뀌지 않음." },
+];
+let quizRight = 0;
+let quizDone = 0;
+$('quiz').innerHTML = QUIZ.map((item, qi) => `<div class="card" data-q="${qi}"><b>Q${qi + 1}. ${esc(item.q)}</b>
+  ${item.opts.map((o, oi) => `<button class="opt" data-o="${oi}">${'ABC'[oi]}. ${esc(o)}</button>`).join('')}
+  <div class="exp">${esc(item.exp)}</div></div>`).join('');
+$('quiz').onclick = (e) => {
+  const btn = e.target.closest('.opt');
+  if (!btn) {
+    return;
+  }
+  const card = btn.closest('[data-q]');
+  if (card.dataset.done) {
+    return;
+  }
+  const item = QUIZ[Number(card.dataset.q)];
+  const chosen = Number(btn.dataset.o);
+  card.dataset.done = '1';
+  card.querySelectorAll('.opt').forEach((b) => {
+    if (Number(b.dataset.o) === item.answer) {
+      b.classList.add('right');
+    }
+  });
+  if (chosen !== item.answer) {
+    btn.classList.add('wrong');
+  } else {
+    quizRight++;
+  }
+  quizDone++;
+  card.querySelector('.exp').style.display = 'block';
+  $('quizScore').textContent = `${quizDone}문항 중 ${quizRight}개 정답` + (quizDone === QUIZ.length ? (quizRight === QUIZ.length ? ' 🎉 만점' : ' · 틀린 문항의 해설 확인하기') : '');
+};
+</script>
+</body>
+</html>
