@@ -1,0 +1,8 @@
+_workspace/
+outputs/
+arduino_circuit_sim/
+2026-11-16-정밀윤문/
+.claude/
+.vercel/
+*.pdf
+ai_text_detection_lab.html
